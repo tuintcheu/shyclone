@@ -3,9 +3,9 @@ dist
 clones
 HL7_Site_Complet
 .git
+.github
 *.log
-public
-src/*.jsx
-src/components
-src/hooks
-src/lib
+README.md
+render.yaml
+vercel.json
+start.sh

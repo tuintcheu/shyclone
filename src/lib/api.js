@@ -22,7 +22,7 @@ async function json(url, options = {}) {
     if (err.name === 'AbortError') throw err
     // Échec du fetch lui-même : le moteur ne tourne pas. On le distingue d'une
     // réponse d'erreur du moteur pour afficher le bon message.
-    const offline = new Error("Moteur injoignable — démarrez-le avec ./start.sh.")
+    const offline = new Error("Service momentanément indisponible. Réessayez dans un instant.")
     offline.offline = true
     throw offline
   }
@@ -69,10 +69,10 @@ export const zipUrl = jobId => avecJeton(`${BASE}/api/jobs/${jobId}/zip`)
    pour que ses scripts accèdent à localStorage, donc pour que ses préférences
    (thème sombre, langue, bandeau cookies…) fonctionnent — sans lui donner
    accès au stockage ni au DOM de ShyClone. */
+const MOTEUR_DEV = 'http://127.0.0.1:5000'
 const PREVIEW_BASE =
-  import.meta.env.VITE_PREVIEW_BASE ??
-  BASE ??
-  ''
+  import.meta.env.VITE_PREVIEW_BASE ||
+  BASE ||
+  (import.meta.env.DEV ? MOTEUR_DEV : '')
 
-export const previewUrl = path =>
-  path ? (PREVIEW_BASE || 'http://127.0.0.1:5000') + path : ''
+export const previewUrl = path => (path ? PREVIEW_BASE + path : '')

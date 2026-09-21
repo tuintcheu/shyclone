@@ -22,6 +22,10 @@ d'ouvrir Vite, et arrête les deux processus sur `Ctrl+C`.
 L'interface est sur http://localhost:5173, le moteur sur le port 5000.
 Pour les lancer séparément : `npm run server` et `npm run client`.
 
+En production, un seul processus suffit : `npm run build` compile l'interface
+dans `dist/`, que le moteur sert lui-même. Tout répond alors sur le port 5000,
+sans second service ni configuration d'origine.
+
 Variables d'environnement reconnues :
 
 | Variable | Rôle | Défaut |
@@ -30,43 +34,29 @@ Variables d'environnement reconnues :
 | `SHYCLONE_HOST` | interface d'écoute du moteur | `127.0.0.1` |
 | `SHYCLONE_TOKEN` | jeton exigé sur `/api` (vide = désactivé) | vide |
 | `VITE_API_TOKEN` | jeton envoyé par l'interface | vide |
+| `SHYCLONE_BLOQUER_PRIVE` | refuse les adresses réseau internes | actif si exposé |
+| `SHYCLONE_RETENTION` | secondes avant suppression d'une capture | `780` (13 min) |
+| `VITE_PREVIEW_BASE` | origine servant l'aperçu, pour l'isoler | même origine |
 | `SHYCLONE_UI_PORT` | port de Vite | `5173` |
 | `SHYCLONE_ENGINE` | cible du proxy Vite | `http://127.0.0.1:5000` |
-| `VITE_API_BASE` | préfixe d'API côté client, pour un build servi ailleurs | vide (relatif) |
+| `VITE_API_BASE` | préfixe d'API côté client, si l'interface est servie ailleurs | vide (relatif) |
 
 ## Déploiement
 
-**Le moteur ne peut pas tourner sur Vercel.** Vercel exécute des fonctions
-serverless : chaque requête est une invocation isolée, sans disque partagé,
-sans état en mémoire conservé d'un appel à l'autre, et les threads lancés en
-arrière-plan sont gelés dès que la réponse est renvoyée. Or une capture dure
-souvent plusieurs minutes, écrit des fichiers qu'une requête ultérieure doit
-relire pour l'aperçu et l'archive, et garde l'état du job en mémoire. Aucune
-commande de démarrage ne contourne ça : c'est le modèle d'exécution qui est
-incompatible.
+Tout tient dans **un seul service** : le `Dockerfile` compile l'interface puis
+la sert depuis le même processus que l'API. Une image, un port, une URL.
 
-### Le plus simple : ne rien déployer
+```bash
+docker build -t shyclone .
+docker run -p 8000:8000 shyclone
+```
 
-ShyClone est un outil de poste de travail. `./start.sh` lance les deux parties
-en local, sans compte ni carte bancaire, et sans exposer un robot d'aspiration
-sur Internet. Si personne d'autre que vous ne doit s'en servir, c'est l'option
-à retenir.
+### Gratuit, sur Render
 
-### Gratuit et en ligne : tout sur Render
-
-Render héberge gratuitement un service web Docker **et** un site statique. Un
-seul compte, un seul dépôt, pas de carte bancaire. `render.yaml` décrit les
-deux services ; vous pouvez aussi les créer à la main dans le tableau de bord :
-
-| Service | Type | Réglages |
-| --- | --- | --- |
-| `shyclone-moteur` | Web Service · Docker · Free | `Dockerfile` à la racine, health check `/api/health` |
-| `shyclone-interface` | Static Site · Free | build `npm ci && npm run build`, publication `dist` |
-
-Sur le site statique, renseignez `VITE_API_BASE` avec l'URL publique du moteur,
-et `VITE_API_TOKEN` avec la même valeur que `SHYCLONE_TOKEN` côté moteur. Vite
-inscrit ces variables dans le bundle au moment du build : il faut redéployer
-l'interface après les avoir changées.
+`render.yaml` décrit ce service unique, en palier gratuit, sans carte bancaire.
+Vous pouvez aussi le créer à la main : Web Service · Docker · Free, `Dockerfile`
+à la racine, health check `/api/health`. Aucune variable à renseigner côté
+interface — elle est servie par le moteur, donc sur la même origine.
 
 Les limites du palier gratuit, à connaître avant de s'y engager :
 
@@ -76,24 +66,66 @@ Les limites du palier gratuit, à connaître avant de s'y engager :
   ce qui rejoint de toute façon la purge automatique décrite plus bas ;
 - 512 Mo de RAM : évitez les captures de plusieurs centaines de pages.
 
-Autres pistes gratuites du même genre : Hugging Face Spaces (Docker), Fly.io,
-ou une instance Always Free chez Oracle Cloud pour une machine qui ne dort pas.
+Autres hébergeurs gratuits du même genre : Hugging Face Spaces (Docker),
+Fly.io, ou une instance Always Free chez Oracle Cloud pour une machine qui ne
+dort pas.
 
-### Garder Vercel pour l'interface
+### Pourquoi pas Vercel
 
-Si vous tenez à Vercel, il peut héberger l'interface seule : `vercel.json` est
-déjà configuré. Le moteur, lui, doit tourner ailleurs (Render, au hasard), et
-`VITE_API_BASE` pointe vers lui.
+Vercel exécute des fonctions serverless : chaque requête est une invocation
+isolée, sans disque partagé, sans état en mémoire conservé d'un appel à
+l'autre, et les threads lancés en arrière-plan sont gelés dès que la réponse
+est renvoyée. Or une capture dure souvent plusieurs minutes, écrit des fichiers
+qu'une requête ultérieure doit relire pour l'aperçu et l'archive, et garde
+l'état du job en mémoire. Aucune commande de démarrage ne contourne ça : c'est
+le modèle d'exécution qui est incompatible.
 
-### Protéger un moteur public
+### Sans rien déployer
 
-Un moteur exposé sur Internet télécharge n'importe quelle URL qu'on lui donne —
-c'est un aspirateur ouvert à tous, et c'est votre adresse IP qui se fait
-bannir. Définissez `SHYCLONE_TOKEN` côté moteur et `VITE_API_TOKEN` côté
-interface : sans le jeton, les routes `/api` répondent 401. Laissées vides (cas
-local), elles ne changent rien.
+ShyClone est aussi un outil de poste de travail : `./start.sh` lance les deux
+parties en local, sans compte ni hébergeur, et sans exposer un robot
+d'aspiration sur Internet.
 
-## Fonctionnement## Fonctionnement
+## Sécurité
+
+Ce qui est en place :
+
+- **Pas de signature technique.** L'en-tête `Server` vaut `ShyClone`, les pages
+  d'erreur sont du JSON neutre, aucune trace d'exécution ni chemin de fichier
+  n'est renvoyé au client, et l'interface ne mentionne aucun outil.
+- **Pas de rebond vers le réseau interne.** Le moteur refuse toute URL qui
+  résout vers une adresse privée, de bouclage, de lien-local ou réservée —
+  y compris après redirection. Sans ce filtre, un moteur exposé sert à scanner
+  le réseau de l'hébergeur et à lire ses métadonnées cloud
+  (`169.254.169.254`). Actif dès que le moteur écoute ailleurs que sur
+  `127.0.0.1` ; `SHYCLONE_BLOQUER_PRIVE=0` le désactive pour cloner un site
+  local en développement.
+- **Écriture confinée.** Les chemins issus des URL sont assainis et vérifiés :
+  rien ne s'écrit ni ne se lit hors du dossier du job.
+- **Accès à l'API.** `SHYCLONE_TOKEN` rend `/api` inaccessible sans jeton.
+  Indispensable sur un moteur public : sinon n'importe qui fait télécharger
+  n'importe quoi par votre serveur, et c'est votre adresse IP qui se fait
+  bannir.
+- **L'aperçu ne peut pas piloter l'API.** Une requête vers `/api` dont le
+  référent est une page capturée est refusée.
+
+Ce qu'il faut savoir :
+
+- L'aperçu s'exécute avec `allow-same-origin`, sans quoi les scripts du site
+  capturé n'accèdent pas à `localStorage` et ses fonctions (thème sombre,
+  choix de langue, bandeau cookies) se cassent. En service unique, l'aperçu
+  partage donc l'origine de l'interface : un site capturé délibérément
+  hostile pourrait manipuler la page ShyClone affichée autour de lui. Ne
+  clonez que des sites dont vous n'attendez pas ça. Pour une isolation
+  complète, servez l'aperçu depuis un autre nom d'hôte et renseignez
+  `VITE_PREVIEW_BASE` au build.
+- Le jeton est inscrit dans le bundle de l'interface au build : il écarte les
+  curieux, il ne protège pas d'un visiteur déterminé. Pour un service
+  réellement privé, gardez le dépôt privé et restreignez l'accès en amont.
+- Un dépôt Git public expose l'intégralité de la pile. Si vous tenez à ce que
+  personne ne sache comment le site est fait, le dépôt doit être privé.
+
+## Fonctionnement
 
 Chaque capture est un **job** identifié, avec son propre dossier
 `clones/<job_id>` : deux captures successives ne se mélangent jamais.
@@ -167,10 +199,7 @@ sont des variables CSS déclarées dans `src/index.css`. Un composant n'a donc p
 
 ## Remarques
 
-- L'aperçu s'affiche dans une `iframe` sans `allow-same-origin` : le code
-  capturé est du code tiers, il n'a pas accès à l'origine de l'application.
-- `clones/` et `HL7_Site_Complet/` (sortie de l'ancienne version) sont ignorés
-  par Git.
+- `clones/` est ignoré par Git : les captures ne quittent jamais la machine.
 - Ne capturez que des sites que vous avez le droit de copier.
 
 ## Scripts
@@ -182,6 +211,10 @@ sont des variables CSS déclarées dans `src/index.css`. Un composant n'a donc p
 | `npm run client` | interface seule |
 | `npm run build` | build de production dans `dist/` |
 | `npm run lint` | Oxlint |
+
+Il existe aussi un mode « service unique » où le moteur sert l'interface
+compilée : `npm run build` puis `npm run server`, tout répond alors sur le
+port 5000. C'est ce que fait l'image Docker.
 
 ---
 

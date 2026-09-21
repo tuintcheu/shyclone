@@ -124,8 +124,8 @@ export function CloneForm({
 
       {engineDown && (
         <p className="anim-apparition rounded-lg border border-err/40 bg-err/10 px-3 py-2.5 text-xs leading-relaxed text-err">
-          Le moteur ne répond pas — le bouton reste inactif tant qu'il n'est pas
-          démarré. Lancez <span className="font-mono font-semibold">npm run dev</span>.
+          Service momentanément indisponible. La capture sera de nouveau possible
+          dès qu'il répond.
         </p>
       )}
     </form>

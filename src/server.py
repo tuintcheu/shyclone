@@ -16,8 +16,10 @@ API consommée par l'interface :
 import gzip
 import hashlib
 import io
+import ipaddress
 import os
 import secrets
+import socket
 import posixpath
 import re
 import shutil
@@ -31,7 +33,8 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+import urllib.request as urllib_request
+from urllib.request import Request
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
@@ -46,6 +49,15 @@ HOTE = os.environ.get("SHYCLONE_HOST", "127.0.0.1")
 # rien ne change. Renseignée, elle empêche un inconnu de faire télécharger
 # n'importe quel site par votre serveur.
 JETON = os.environ.get("SHYCLONE_TOKEN", "").strip()
+
+# Interdit au moteur d'aller chercher une adresse interne (127.x, 10.x, 192.168.x,
+# 169.254.169.254 des métadonnées cloud…). Sans ce filtre, un moteur exposé sur
+# Internet devient un relais pour scanner le réseau privé qui l'héberge.
+# Actif dès que le moteur écoute ailleurs que sur la boucle locale.
+_prive = os.environ.get("SHYCLONE_BLOQUER_PRIVE")
+BLOQUER_PRIVE = (HOTE != "127.0.0.1") if _prive is None else _prive not in ("0", "false", "")
+
+DOSSIER_UI = RACINE / "dist"
 
 # Se présenter en navigateur réel : beaucoup de sites renvoient 403 à un
 # client qui s'annonce comme robot.
@@ -90,6 +102,38 @@ JOBS = {}
 VERROU_JOBS = threading.Lock()
 
 
+@app.after_request
+def entetes_reponse(reponse):
+    """Aucune signature de la pile technique, et quelques en-têtes de sécurité."""
+    reponse.headers["Server"] = "ShyClone"
+    reponse.headers["X-Content-Type-Options"] = "nosniff"
+    reponse.headers["Referrer-Policy"] = "no-referrer"
+    reponse.headers.pop("X-Powered-By", None)
+    return reponse
+
+
+@app.errorhandler(404)
+def _404(_):
+    return jsonify({"statut": "error", "message": "Ressource introuvable."}), 404
+
+
+@app.errorhandler(405)
+def _405(_):
+    return jsonify({"statut": "error", "message": "Méthode non autorisée."}), 405
+
+
+@app.errorhandler(Exception)
+def _erreur(exc):
+    """Renvoie un message neutre : ni trace d'exécution, ni nom de fichier."""
+    code = getattr(exc, "code", 500)
+    if not isinstance(code, int) or code < 400:
+        code = 500
+    if code >= 500:
+        print(f"[ShyClone] erreur interne : {type(exc).__name__}: {exc}")
+        return jsonify({"statut": "error", "message": "Erreur interne."}), 500
+    return jsonify({"statut": "error", "message": "Requête invalide."}), code
+
+
 @app.before_request
 def controler_jeton():
     """Filtre les routes /api quand un jeton est configuré.
@@ -98,9 +142,13 @@ def controler_jeton():
     imprévisibles, et l'iframe ne peut pas ajouter d'en-tête aux requêtes des
     ressources de la page capturée.
     """
-    if not JETON or request.method == "OPTIONS":
+    if request.method == "OPTIONS" or not request.path.startswith("/api/"):
         return None
-    if not request.path.startswith("/api/") or request.path == "/api/health":
+    # Une page capturée affichée dans l'aperçu ne doit jamais atteindre l'API,
+    # même lorsqu'elle partage l'origine de l'application.
+    if urlsplit(request.headers.get("Referer", "")).path.startswith("/preview/"):
+        return jsonify({"statut": "error", "message": "Requête refusée."}), 403
+    if not JETON or request.path == "/api/health":
         return None
     fourni = request.headers.get("X-ShyClone-Token") or request.args.get("jeton", "")
     if not secrets.compare_digest(fourni, JETON):
@@ -194,6 +242,35 @@ def decoder(brut, type_contenu):
         return brut.decode("utf-8", errors="replace")
 
 
+def verifier_cible(url):
+    """Refuse une URL qui pointe vers le réseau interne. Lève ValueError."""
+    p = urlsplit(url)
+    if p.scheme not in ("http", "https") or not p.hostname:
+        raise ValueError("adresse non autorisée")
+    if not BLOQUER_PRIVE:
+        return
+    try:
+        infos = socket.getaddrinfo(p.hostname, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise ValueError("domaine introuvable") from None
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            raise ValueError("adresse réseau non autorisée")
+
+
+class ControleRedirection(urllib_request.HTTPRedirectHandler):
+    """Revalide chaque saut : une URL publique peut rediriger vers une adresse interne."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        verifier_cible(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+OUVREUR = urllib_request.build_opener(ControleRedirection)
+
+
 def decompresser(donnees, encodage):
     """Décompresse la réponse.
 
@@ -220,8 +297,9 @@ def decompresser(donnees, encodage):
 
 def telecharger(url):
     """Récupère une URL. Renvoie (octets, type_mime, en-tête, url_finale)."""
+    verifier_cible(url)
     requete = Request(url, headers=ENTETES)
-    with urlopen(requete, timeout=DELAI) as reponse:
+    with OUVREUR.open(requete, timeout=DELAI) as reponse:
         brut = decompresser(
             reponse.read(),
             (reponse.headers.get("Content-Encoding") or "").strip().lower(),
@@ -233,6 +311,8 @@ def telecharger(url):
 
 def message_erreur(exc):
     """Traduit une exception réseau en message lisible."""
+    if isinstance(exc, ValueError):
+        return str(exc)
     if isinstance(exc, HTTPError):
         return f"HTTP {exc.code}"
     if isinstance(exc, URLError):
@@ -815,7 +895,33 @@ def preview(job_id, relatif=None):
         return "Fichier absent de la capture", 404
 
 
+@app.get("/")
+@app.get("/<path:chemin>")
+def interface(chemin=""):
+    """Sert l'interface compilée (dist/) depuis le même service que l'API."""
+    if chemin.startswith(("api/", "preview/")):
+        return jsonify({"statut": "error", "message": "Ressource introuvable."}), 404
+    if not DOSSIER_UI.is_dir():
+        return jsonify({"statut": "error", "message": "Interface indisponible."}), 503
+    if chemin:
+        cible = chemin_sur(DOSSIER_UI, chemin)
+        if cible is not None and cible.is_file():
+            return send_from_directory(DOSSIER_UI, chemin)
+    return send_from_directory(DOSSIER_UI, "index.html")
+
+
 if __name__ == "__main__":
+    # Le serveur de développement annonce sinon « Werkzeug/x Python/y », et
+    # ajoute son propre en-tête Server en plus de celui de l'application.
+    from werkzeug.serving import WSGIRequestHandler
+
+    class HandlerDiscret(WSGIRequestHandler):
+        def send_header(self, keyword, value):
+            if keyword.lower() == "server":
+                return
+            super().send_header(keyword, value)
+
     DOSSIER_CLONES.mkdir(parents=True, exist_ok=True)
     print(f"[ShyClone] moteur à l'écoute sur http://{HOTE}:{PORT}")
-    app.run(host=HOTE, port=PORT, debug=False, use_reloader=False, threaded=True)
+    app.run(host=HOTE, port=PORT, debug=False, use_reloader=False,
+            threaded=True, request_handler=HandlerDiscret)
