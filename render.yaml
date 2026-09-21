@@ -1,0 +1,24 @@
+# Déploiement gratuit des deux parties sur Render, depuis ce dépôt.
+# À adapter ou à recréer à la main dans le tableau de bord — les blueprints
+# Render évoluent et celui-ci n'a pas pu être testé sur un compte réel.
+services:
+  - type: web
+    name: shyclone-moteur
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: SHYCLONE_TOKEN
+        generateValue: true       # Render génère le jeton, à recopier côté interface
+
+  - type: web
+    name: shyclone-interface
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE        # URL publique du service shyclone-moteur
+        sync: false
+      - key: VITE_API_TOKEN       # même valeur que SHYCLONE_TOKEN ci-dessus
+        sync: false

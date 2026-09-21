@@ -1,0 +1,6 @@
+Flask>=3.0
+Flask-Cors>=4.0
+
+# Serveur de production, utilisé par le Dockerfile. Inutile en local :
+# start.sh lance le serveur de développement de Flask.
+gunicorn>=21.2

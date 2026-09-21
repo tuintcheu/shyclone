@@ -1,0 +1,129 @@
+import { useCallback, useState } from 'react'
+import { ActivityLog } from './components/ActivityLog'
+import { CloneForm, PAGES_MAX } from './components/CloneForm'
+import { JobStats } from './components/JobStats'
+import { PreviewPane } from './components/PreviewPane'
+import { RetentionNotice } from './components/RetentionNotice'
+import { Toaster } from './components/Toaster'
+import { TopBar } from './components/TopBar'
+import { UnreachableDialog } from './components/UnreachableDialog'
+import { useCloneJob } from './hooks/useCloneJob'
+import { useEngineHealth } from './hooks/useEngineHealth'
+import { useTheme } from './hooks/useTheme'
+import { useToasts } from './hooks/useToasts'
+import { previewUrl, zipUrl } from './lib/api'
+import { hostOf, normalizeUrl } from './lib/url'
+
+const PAGES_DEFAUT = 50
+
+export default function App() {
+  const { theme, toggle } = useTheme()
+  const engine = useEngineHealth()
+  const { toasts, push, dismiss } = useToasts()
+
+  const [url, setUrl] = useState('')
+  const [pagesMax, setPagesMax] = useState(String(PAGES_DEFAUT))
+  const [viewport, setViewport] = useState('desktop')
+  const [injoignable, setInjoignable] = useState(null)
+  const [expire, setExpire] = useState(false)
+
+  const surFin = useCallback(
+    (statut, charge) => {
+      if (statut === 'done') {
+        push(
+          `Capture terminée — ${charge.pages} page(s), ${charge.assets} ressource(s).`,
+          'ok',
+        )
+      } else if (statut === 'aborted') {
+        push(`Capture interrompue — ${charge.pages} page(s) conservée(s).`, 'warn')
+      } else {
+        const message =
+          typeof charge === 'string' ? charge : charge?.erreur || 'La capture a échoué.'
+        push(message, 'error')
+      }
+    },
+    [push],
+  )
+
+  const surInjoignable = useCallback(raison => setInjoignable(raison), [])
+  const fermerDialogue = useCallback(() => setInjoignable(null), [])
+
+  const { job, start, abort } = useCloneJob({
+    onFinish: surFin,
+    onUnreachable: surInjoignable,
+  })
+
+  const lancer = useCallback(() => {
+    const adresse = normalizeUrl(url)
+    setUrl(adresse)
+    const saisi = Number.parseInt(pagesMax, 10)
+    const limite = Number.isFinite(saisi) ? Math.min(Math.max(saisi, 1), PAGES_MAX) : PAGES_DEFAUT
+    setPagesMax(String(limite))
+    setExpire(false)
+    start(adresse, limite)
+  }, [url, pagesMax, start])
+
+  const surExpiration = useCallback(() => setExpire(true), [])
+
+  const source = expire ? '' : previewUrl(job.preview)
+  const archive =
+    !expire && job.jobId && job.pages > 0 && (job.status === 'done' || job.status === 'aborted')
+      ? zipUrl(job.jobId)
+      : null
+
+  return (
+    <div className="flex min-h-svh flex-col lg:h-svh">
+      <TopBar engine={engine} theme={theme} onToggleTheme={toggle} />
+
+      <main className="grid min-h-0 flex-1 grid-rows-[auto_1fr] lg:grid-cols-[340px_1fr] lg:grid-rows-1">
+        <aside className="flex min-h-0 flex-col gap-5 border-b border-line bg-surface p-4 sm:p-5 lg:border-b-0 lg:border-r">
+          <CloneForm
+            url={url}
+            onUrlChange={setUrl}
+            pagesMax={pagesMax}
+            onPagesMaxChange={setPagesMax}
+            status={job.status}
+            engineDown={engine === 'down'}
+            onSubmit={lancer}
+            onAbort={abort}
+          />
+
+          <div className="flex flex-col gap-3 border-t border-line pt-3">
+            <JobStats job={job} pagesMax={pagesMax} />
+            <RetentionNotice
+              key={job.expiresAt ?? 'aucune'}
+              expiresAt={job.expiresAt}
+              retentionMinutes={Math.round(job.retention / 60)}
+              onExpire={surExpiration}
+            />
+          </div>
+
+          <div className="flex min-h-48 flex-1 flex-col gap-2 lg:min-h-0">
+            <h2 className="text-sm font-medium text-ink">Activité</h2>
+            <ActivityLog events={job.events} />
+          </div>
+
+          <p className="text-[11px] text-ink-faint">
+            ShyClone 1.0 — <span className="font-mono">mr_shy</span>
+          </p>
+        </aside>
+
+        <div className="flex min-h-[420px] flex-col p-4 sm:p-5 lg:min-h-0">
+          <PreviewPane
+            src={source}
+            host={hostOf(url)}
+            viewport={viewport}
+            onViewportChange={setViewport}
+            zipHref={archive}
+            version={job.status === 'running' ? 'live' : 'final'}
+          />
+        </div>
+      </main>
+
+      {injoignable && (
+        <UnreachableDialog reason={injoignable} onClose={fermerDialogue} />
+      )}
+      <Toaster toasts={toasts} onDismiss={dismiss} />
+    </div>
+  )
+}
