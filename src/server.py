@@ -15,11 +15,11 @@ API consommée par l'interface :
 
 import gzip
 import hashlib
-import io
 import ipaddress
 import os
 import secrets
 import socket
+import tempfile
 import posixpath
 import re
 import shutil
@@ -863,17 +863,28 @@ def archive(job_id):
             "message": f"Capture expirée — elle est supprimée {duree_retention()} "
                        "après la fin du clonage.",
         }), 404
-    tampon = io.BytesIO()
-    with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as zf:
-        for chemin in job.dossier.rglob("*"):
-            if chemin.is_file():
-                zf.write(chemin, chemin.relative_to(job.dossier))
-    tampon.seek(0)
+    # L'archive passe par un fichier temporaire, pas par la mémoire : sur une
+    # instance à 512 Mo, zipper une capture de plusieurs centaines de Mo ferait
+    # tomber le processus.
+    fichier = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    try:
+        with zipfile.ZipFile(fichier, "w", zipfile.ZIP_DEFLATED) as zf:
+            for chemin in job.dossier.rglob("*"):
+                if chemin.is_file():
+                    zf.write(chemin, chemin.relative_to(job.dossier))
+        fichier.close()
+    except Exception:
+        fichier.close()
+        os.unlink(fichier.name)
+        raise
+
     nom = re.sub(r"[^A-Za-z0-9.-]", "-", job.hote) or "site"
-    return send_file(
-        tampon, mimetype="application/zip",
+    reponse = send_file(
+        fichier.name, mimetype="application/zip",
         as_attachment=True, download_name=f"{nom}-{job.id}.zip",
     )
+    reponse.call_on_close(lambda: os.path.exists(fichier.name) and os.unlink(fichier.name))
+    return reponse
 
 
 @app.get("/preview/<job_id>/")
