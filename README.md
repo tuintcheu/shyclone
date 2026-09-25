@@ -177,6 +177,13 @@ renvoient une erreur explicite. Ce ménage est ce qui permet de tenir sur le
 petit disque d'un hébergement gratuit. En parallèle, seules les huit dernières
 captures sont gardées.
 
+Deux étendues au choix : **page seule** ne capture que l'adresse saisie, avec
+ses styles et ses images ; **site complet** suit les liens internes jusqu'au
+budget de pages. Pendant la capture, l'aperçu montre une maquette dont les
+blocs se reconstruisent à chaque page réellement écrite, avec le chemin de la
+page en cours — l'animation suit le moteur, elle ne tourne pas en boucle dans
+le vide.
+
 Le moteur parcourt le site en largeur depuis l'URL de départ :
 
 - seules les pages du même domaine sont suivies (`www.` ignoré) ; si l'URL de

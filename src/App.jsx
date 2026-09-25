@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ActivityLog } from './components/ActivityLog'
 import { CloneForm, PAGES_MAX } from './components/CloneForm'
 import { JobStats } from './components/JobStats'
@@ -22,6 +22,7 @@ export default function App() {
   const { toasts, push, dismiss } = useToasts()
 
   const [url, setUrl] = useState('')
+  const [mode, setMode] = useState('site')
   const [pagesMax, setPagesMax] = useState(String(PAGES_DEFAUT))
   const [viewport, setViewport] = useState('desktop')
   const [injoignable, setInjoignable] = useState(null)
@@ -57,11 +58,19 @@ export default function App() {
     const adresse = normalizeUrl(url)
     setUrl(adresse)
     const saisi = Number.parseInt(pagesMax, 10)
-    const limite = Number.isFinite(saisi) ? Math.min(Math.max(saisi, 1), PAGES_MAX) : PAGES_DEFAUT
-    setPagesMax(String(limite))
+    const budget = Number.isFinite(saisi) ? Math.min(Math.max(saisi, 1), PAGES_MAX) : PAGES_DEFAUT
+    setPagesMax(String(budget))
     setExpire(false)
-    start(adresse, limite)
-  }, [url, pagesMax, start])
+    // « Page seule » : le moteur s'arrête après l'adresse saisie, ses styles et
+    // ses images étant de toute façon récupérés.
+    start(adresse, mode === 'page' ? 1 : budget)
+  }, [url, pagesMax, mode, start])
+
+  // Dernière page réellement écrite, affichée sous la maquette animée.
+  const pageCourante = useMemo(() => {
+    const dernier = job.events.findLast(e => e.texte.startsWith('Page '))
+    return dernier ? dernier.texte.split('—').slice(1).join('—').trim() : ''
+  }, [job.events])
 
   const surExpiration = useCallback(() => setExpire(true), [])
 
@@ -76,10 +85,13 @@ export default function App() {
       <TopBar engine={engine} theme={theme} onToggleTheme={toggle} />
 
       <main className="grid min-h-0 flex-1 grid-rows-[auto_1fr] lg:grid-cols-[340px_1fr] lg:grid-rows-1">
-        <aside className="flex min-h-0 flex-col gap-5 border-b border-line bg-surface p-4 sm:p-5 lg:border-b-0 lg:border-r">
+        <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto border-b border-line bg-surface p-4 sm:p-5 lg:border-b-0 lg:border-r">
           <CloneForm
+            className="shrink-0"
             url={url}
             onUrlChange={setUrl}
+            mode={mode}
+            onModeChange={setMode}
             pagesMax={pagesMax}
             onPagesMaxChange={setPagesMax}
             status={job.status}
@@ -88,8 +100,8 @@ export default function App() {
             onAbort={abort}
           />
 
-          <div className="flex flex-col gap-3 border-t border-line pt-3">
-            <JobStats job={job} pagesMax={pagesMax} />
+          <div className="flex shrink-0 flex-col gap-3 border-t border-line pt-3">
+            <JobStats job={job} pagesMax={mode === 'page' ? 1 : pagesMax} />
             <RetentionNotice
               key={job.expiresAt ?? 'aucune'}
               expiresAt={job.expiresAt}
@@ -98,12 +110,12 @@ export default function App() {
             />
           </div>
 
-          <div className="flex min-h-48 flex-1 flex-col gap-2 lg:min-h-0">
+          <div className="flex min-h-56 flex-1 shrink-0 flex-col gap-2">
             <h2 className="text-sm font-medium text-ink">Activité</h2>
             <ActivityLog events={job.events} />
           </div>
 
-          <footer className="flex flex-col gap-1.5 text-[11px] text-ink-faint">
+          <footer className="flex shrink-0 flex-col gap-1.5 text-[11px] text-ink-faint">
             <nav className="flex flex-wrap gap-x-3 gap-y-1">
               <a href="/mentions-legales.html" className="transition-colors hover:text-ink-soft">
                 Mentions légales
@@ -129,6 +141,8 @@ export default function App() {
             onViewportChange={setViewport}
             zipHref={archive}
             version={job.status === 'running' ? 'live' : 'final'}
+            job={job}
+            pageCourante={pageCourante}
           />
         </div>
       </main>

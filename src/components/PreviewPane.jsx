@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Download, ExternalLink, Laptop, RotateCw, Smartphone, Tablet } from 'lucide-react'
+import { BuildingPreview } from './BuildingPreview'
 import { Mark } from './Logo'
 
 const FORMATS = [
@@ -31,9 +32,19 @@ function Cadre({ src, largeur }) {
   )
 }
 
-export function PreviewPane({ src, host, viewport, onViewportChange, zipHref, version }) {
+export function PreviewPane({
+  src,
+  host,
+  viewport,
+  onViewportChange,
+  zipHref,
+  version,
+  job,
+  pageCourante,
+}) {
   const format = FORMATS.find(f => f.id === viewport) ?? FORMATS[0]
   const [rechargements, setRechargements] = useState(0)
+  const enConstruction = job.status === 'checking' || job.status === 'running'
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3">
@@ -76,9 +87,13 @@ export function PreviewPane({ src, host, viewport, onViewportChange, zipHref, ve
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
         <div className="flex shrink-0 items-center gap-3 border-b border-line px-3.5 py-2.5">
           <span className="truncate font-mono text-xs text-ink-faint">
-            {src ? host || 'capture locale' : 'aucune capture'}
+            {enConstruction
+              ? `${host || 'site'} — construction…`
+              : src
+                ? host || 'capture locale'
+                : 'aucune capture'}
           </span>
-          {src && (
+          {src && !enConstruction && (
             <button
               type="button"
               onClick={() => setRechargements(v => v + 1)}
@@ -89,7 +104,7 @@ export function PreviewPane({ src, host, viewport, onViewportChange, zipHref, ve
               Recharger
             </button>
           )}
-          {src && (
+          {src && !enConstruction && (
             <a
               href={src}
               target="_blank"
@@ -103,7 +118,9 @@ export function PreviewPane({ src, host, viewport, onViewportChange, zipHref, ve
         </div>
 
         <div className="flex min-h-0 flex-1 justify-center overflow-auto bg-canvas">
-          {src ? (
+          {enConstruction ? (
+            <BuildingPreview job={job} pageCourante={pageCourante} />
+          ) : src ? (
             <Cadre key={`${src}|${version}|${rechargements}`} src={src} largeur={format.largeur} />
           ) : (
             <div className="anim-apparition flex flex-col items-center justify-center gap-4 px-6 text-center">

@@ -1,13 +1,21 @@
 import { useId } from 'react'
-import { Loader2, Play, Square } from 'lucide-react'
+import { FileText, Layers, Loader2, Play, Square } from 'lucide-react'
 import { isValidUrl, normalizeUrl } from '../lib/url'
 
 export const PAGES_MAX = 5000
 const RACCOURCIS = [25, 100, 500, PAGES_MAX]
 
+const MODES = [
+  { id: 'page', label: 'Page seule', icone: FileText },
+  { id: 'site', label: 'Site complet', icone: Layers },
+]
+
 export function CloneForm({
+  className = '',
   url,
   onUrlChange,
+  mode,
+  onModeChange,
   pagesMax,
   onPagesMaxChange,
   status,
@@ -28,7 +36,7 @@ export function CloneForm({
   }
 
   return (
-    <form onSubmit={soumettre} className="flex flex-col gap-5">
+    <form onSubmit={soumettre} className={`flex flex-col gap-5 ${className}`}>
       <div className="flex flex-col gap-1.5">
         <label htmlFor={idUrl} className="text-xs font-semibold text-ink-soft">
           Adresse du site
@@ -54,6 +62,37 @@ export function CloneForm({
       </div>
 
       <div className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-ink-soft">Étendue</span>
+        <div className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-raised p-1">
+          {MODES.map(({ id, label, icone: Icone }) => {
+            const actif = mode === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onModeChange(id)}
+                disabled={enCours || verifie}
+                aria-pressed={actif}
+                className={`flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium transition-all duration-200 ${
+                  actif
+                    ? 'bg-invert-bg text-invert-ink shadow-sm'
+                    : 'text-ink-soft hover:bg-surface hover:text-ink disabled:opacity-45'
+                }`}
+              >
+                <Icone size={13} />
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs leading-relaxed text-ink-faint">
+          {mode === 'page'
+            ? "Seule l'adresse saisie est capturée, avec ses styles et ses images."
+            : 'Les liens internes sont suivis, dans la limite du budget ci-dessous.'}
+        </p>
+      </div>
+
+      <div className={`flex flex-col gap-2 ${mode === 'page' ? 'hidden' : ''}`}>
         <div className="flex items-center justify-between gap-3">
           <label htmlFor={idPages} className="text-xs font-semibold text-ink-soft">
             Pages maximum
