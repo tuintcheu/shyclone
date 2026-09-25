@@ -37,6 +37,9 @@ Variables d'environnement reconnues :
 | `SHYCLONE_TOKEN` | jeton exigé sur `/api` (vide = désactivé) | vide |
 | `VITE_API_TOKEN` | jeton envoyé par l'interface | vide |
 | `SHYCLONE_BLOQUER_PRIVE` | refuse les adresses réseau internes | actif si exposé |
+| `SHYCLONE_FORCE_HTTPS` | redirection HTTPS + en-tête HSTS | actif si exposé |
+| `SHYCLONE_QUOTA_CLONE` | captures autorisées par IP et par heure | `12` |
+| `SHYCLONE_QUOTA_CHECK` | vérifications autorisées par IP et par heure | `60` |
 | `SHYCLONE_RETENTION` | secondes avant suppression d'une capture | `780` (13 min) |
 | `VITE_PREVIEW_BASE` | origine servant l'aperçu, pour l'isoler | même origine |
 | `SHYCLONE_UI_PORT` | port de Vite | `5173` |
@@ -117,6 +120,13 @@ Ce qui est en place :
   pour un accès programmatique à `/api` sans navigateur.
 - **L'aperçu ne peut pas piloter l'API.** Une requête vers `/api` dont le
   référent est une page capturée est refusée.
+- **HTTPS imposé.** Le trafic en clair est redirigé en 308 et l'en-tête HSTS
+  demande au navigateur de ne plus y revenir pendant un an.
+- **Quotas par visiteur.** Douze captures par heure et par adresse IP, soixante
+  vérifications. Sans ça, un aspirateur laissé ouvert tourne en boucle.
+- **Aucune indexation.** `robots.txt` interdit tout, et les pages portent
+  `noindex` : ni l'outil ni les copies de sites tiers servies sous `/preview/`
+  n'ont vocation à se retrouver dans un moteur de recherche.
 
 Ce qu'il faut savoir :
 
@@ -137,6 +147,23 @@ Ce qu'il faut savoir :
   `SHYCLONE_MDP` qui ferme réellement l'accès.
 - Un dépôt Git public expose l'intégralité de la pile. Si vous tenez à ce que
   personne ne sache comment le site est fait, le dépôt doit être privé.
+
+## Pages légales
+
+`public/mentions-legales.html`, `public/confidentialite.html` et
+`public/cgu.html` sont servies par le moteur et reliées depuis le pied de
+l'interface.
+
+**Elles contiennent des emplacements marqués « à compléter »** : identité de
+l'éditeur, coordonnées, hébergeur, pays du droit applicable. Tant qu'ils ne
+sont pas remplis, ces pages ne valent rien juridiquement. Elles deviennent
+obligatoires dès lors que le service est ouvert au public, et a fortiori s'il
+devient payant.
+
+La politique de confidentialité décrit l'état réel du code : aucun cookie,
+aucun traceur, captures supprimées à treize minutes, adresse IP conservée une
+heure pour les quotas. Si vous ajoutez une mesure d'audience ou un paiement,
+il faudra la mettre à jour.
 
 ## Fonctionnement
 

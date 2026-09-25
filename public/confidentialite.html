@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Politique de confidentialité — ShyClone</title>
+<style>
+  :root {
+    --canvas:#eceae5; --surface:#fff; --line:#d3cfc6; --ink:#0a0a09;
+    --ink-soft:#454239; --ink-faint:#6f6b61; --accent:#1d4ed8; --warn:#b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas:#0a0a09; --surface:#141412; --line:#3a3935; --ink:#faf9f6;
+      --ink-soft:#b3afa6; --ink-faint:#85817a; --accent:#7aa4ff; --warn:#fbbf24;
+    }
+  }
+  * { box-sizing:border-box }
+  body {
+    margin:0; background:var(--canvas); color:var(--ink);
+    font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page { max-width:44rem; margin:0 auto; padding:2.5rem 1.25rem 4rem }
+  header { display:flex; align-items:center; gap:.75rem; margin-bottom:2.5rem }
+  header img { height:1.75rem; width:auto }
+  @media (prefers-color-scheme: dark) { header img { filter:invert(1) } }
+  header a { margin-left:auto; color:var(--ink-soft); text-decoration:none; font-size:.875rem }
+  header a:hover { color:var(--ink) }
+  h1 { font-size:1.6rem; letter-spacing:-.02em; margin:0 0 .35rem }
+  .maj { color:var(--ink-faint); font-size:.8125rem; margin:0 0 2.5rem }
+  h2 { font-size:1.05rem; margin:2.25rem 0 .6rem; padding-top:1.25rem; border-top:1px solid var(--line) }
+  p, li { color:var(--ink-soft) }
+  ul { padding-left:1.1rem }
+  li { margin:.3rem 0 }
+  a { color:var(--accent) }
+  strong { color:var(--ink) }
+  .todo {
+    display:inline-block; background:color-mix(in oklab, var(--warn) 16%, transparent);
+    color:var(--warn); border:1px solid color-mix(in oklab, var(--warn) 45%, transparent);
+    border-radius:.3rem; padding:0 .35rem; font-size:.875rem; font-weight:600;
+  }
+  footer { margin-top:3rem; padding-top:1.25rem; border-top:1px solid var(--line);
+            color:var(--ink-faint); font-size:.8125rem }
+  footer a { color:var(--ink-soft); text-decoration:none; margin-right:1rem }
+  footer a:hover { color:var(--ink) }
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <img src="/logo.png" alt="ShyClone">
+  <a href="/">← Retour à l'application</a>
+</header>
+
+<h1>Politique de confidentialité</h1>
+<p class="maj">Dernière mise à jour : 25 septembre 2026</p>
+
+<h2>En bref</h2>
+<p>ShyClone ne dépose <strong>aucun cookie</strong>, n'utilise <strong>aucun
+traceur publicitaire</strong> et ne mesure pas votre audience. Rien de ce qui
+transite n'est revendu ni partagé à des fins commerciales.</p>
+
+<h2>Responsable du traitement</h2>
+<p><span class="todo">à compléter</span> (identité et coordonnées de l'éditeur, voir les
+<a href="/mentions-legales.html">mentions légales</a>).</p>
+
+<h2>Données traitées</h2>
+<ul>
+  <li><strong>Les adresses que vous soumettez</strong> et le contenu des pages
+      capturées, le temps de la capture.</li>
+  <li><strong>Votre adresse IP</strong>, conservée en mémoire une heure pour
+      limiter le nombre de captures par visiteur, et inscrite dans les journaux
+      techniques du serveur.</li>
+  <li><strong>Votre préférence de thème</strong> (clair ou sombre), enregistrée
+      dans le stockage local de votre navigateur. Ce n'est pas un cookie : elle
+      ne quitte jamais votre appareil et n'est jamais transmise au serveur.</li>
+</ul>
+
+<h2>Finalités</h2>
+<p>Ces données servent uniquement à exécuter la capture que vous demandez, à
+vous la restituer, et à empêcher qu'un visiteur ne monopolise le service.</p>
+
+<h2>Durée de conservation</h2>
+<ul>
+  <li>Fichiers capturés : <strong>supprimés automatiquement treize minutes</strong>
+      après la fin du clonage, ainsi qu'à chaque redémarrage du service.</li>
+  <li>Adresse IP pour la limitation de débit : une heure.</li>
+  <li>Journaux techniques : selon la politique de l'hébergeur, <span class="todo">à compléter</span>.</li>
+</ul>
+
+<h2>Destinataires</h2>
+<p>Aucun tiers ne reçoit ces données, hormis l'hébergeur du service, qui agit
+comme sous-traitant technique.</p>
+
+<h2>Vos droits</h2>
+<p>Vous disposez d'un droit d'accès, de rectification, d'effacement et
+d'opposition. Compte tenu des durées ci-dessus, l'essentiel des données a
+disparu avant qu'une demande puisse être traitée. Pour toute question :
+<span class="todo">à compléter</span>.</p>
+
+<footer>
+  <a href="/mentions-legales.html">Mentions légales</a>
+  <a href="/confidentialite.html">Confidentialité</a>
+  <a href="/cgu.html">CGU</a>
+</footer>
+</div>
+</body>
+</html>

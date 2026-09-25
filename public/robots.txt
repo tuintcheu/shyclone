@@ -1,0 +1,4 @@
+# ShyClone est un outil privé : rien ici n'a vocation à être indexé, et les
+# captures servies sous /preview/ sont des copies de sites tiers.
+User-agent: *
+Disallow: /

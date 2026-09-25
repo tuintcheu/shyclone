@@ -28,7 +28,7 @@ import time
 import uuid
 import zipfile
 import zlib
-from collections import deque
+from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -56,6 +56,17 @@ JETON = os.environ.get("SHYCLONE_TOKEN", "").strip()
 # identifiants et les renvoie pour l'iframe comme pour le téléchargement.
 MDP = os.environ.get("SHYCLONE_MDP", "").strip()
 UTILISATEUR = os.environ.get("SHYCLONE_UTILISATEUR", "shy").strip()
+
+# Derrière un hébergeur (Render, Fly…), la requête arrive en clair avec
+# l'en-tête X-Forwarded-Proto. Actif dès que le moteur n'écoute plus en local.
+_https = os.environ.get("SHYCLONE_FORCE_HTTPS")
+FORCER_HTTPS = (HOTE != "127.0.0.1") if _https is None else _https not in ("0", "false", "")
+
+# Nombre de requêtes tolérées par adresse IP et par heure. Un aspirateur de
+# sites laissé ouvert se fait sinon utiliser en boucle.
+QUOTA_CLONE = int(os.environ.get("SHYCLONE_QUOTA_CLONE") or 12)
+QUOTA_CHECK = int(os.environ.get("SHYCLONE_QUOTA_CHECK") or 60)
+FENETRE = 3600
 
 # Interdit au moteur d'aller chercher une adresse interne (127.x, 10.x, 192.168.x,
 # 169.254.169.254 des métadonnées cloud…). Sans ce filtre, un moteur exposé sur
@@ -108,6 +119,39 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 JOBS = {}
 VERROU_JOBS = threading.Lock()
 
+APPELS = defaultdict(list)          # ip -> horodatages
+VERROU_APPELS = threading.Lock()
+
+
+def adresse_client():
+    """IP réelle du visiteur, en tenant compte du proxy de l'hébergeur."""
+    transmise = request.headers.get("X-Forwarded-For", "")
+    if transmise:
+        return transmise.split(",")[0].strip()
+    return request.remote_addr or "?"
+
+
+def quota_depasse(cle, limite):
+    maintenant = time.time()
+    with VERROU_APPELS:
+        recents = [t for t in APPELS[cle] if maintenant - t < FENETRE]
+        if len(recents) >= limite:
+            APPELS[cle] = recents
+            return True
+        recents.append(maintenant)
+        APPELS[cle] = recents
+    return False
+
+
+@app.before_request
+def imposer_https():
+    """Redirige le trafic en clair et demande au navigateur de ne plus y revenir."""
+    if not FORCER_HTTPS:
+        return None
+    if request.headers.get("X-Forwarded-Proto", "https") == "http":
+        return Response("", 308, {"Location": request.url.replace("http://", "https://", 1)})
+    return None
+
 
 @app.after_request
 def entetes_reponse(reponse):
@@ -116,6 +160,8 @@ def entetes_reponse(reponse):
     reponse.headers["X-Content-Type-Options"] = "nosniff"
     reponse.headers["Referrer-Policy"] = "no-referrer"
     reponse.headers.pop("X-Powered-By", None)
+    if FORCER_HTTPS:
+        reponse.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return reponse
 
 
@@ -815,6 +861,8 @@ def health():
 
 @app.post("/api/check")
 def check():
+    if quota_depasse(f"check:{adresse_client()}", QUOTA_CHECK):
+        return jsonify({"ok": False, "raison": "Trop de vérifications. Réessayez plus tard."}), 429
     url = ((request.get_json(silent=True) or {}).get("url") or "").strip()
     p = urlsplit(url)
     if p.scheme not in ("http", "https") or not p.netloc:
@@ -833,6 +881,11 @@ def check():
 
 @app.post("/api/clone")
 def clone():
+    if quota_depasse(f"clone:{adresse_client()}", QUOTA_CLONE):
+        return jsonify({
+            "statut": "error",
+            "message": f"Vous avez atteint la limite de {QUOTA_CLONE} captures par heure.",
+        }), 429
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     p = urlsplit(url)
@@ -942,6 +995,11 @@ def interface(chemin=""):
         cible = chemin_sur(DOSSIER_UI, chemin)
         if cible is not None and cible.is_file():
             return send_from_directory(DOSSIER_UI, chemin)
+        # Liens propres : /mentions-legales sert mentions-legales.html.
+        if "." not in chemin.rsplit("/", 1)[-1]:
+            page = chemin_sur(DOSSIER_UI, chemin + ".html")
+            if page is not None and page.is_file():
+                return send_from_directory(DOSSIER_UI, chemin + ".html")
     return send_from_directory(DOSSIER_UI, "index.html")
 
 

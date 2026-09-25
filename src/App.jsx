@@ -103,9 +103,22 @@ export default function App() {
             <ActivityLog events={job.events} />
           </div>
 
-          <p className="text-[11px] text-ink-faint">
-            ShyClone 1.0 — <span className="font-mono">mr_shy</span>
-          </p>
+          <footer className="flex flex-col gap-1.5 text-[11px] text-ink-faint">
+            <nav className="flex flex-wrap gap-x-3 gap-y-1">
+              <a href="/mentions-legales.html" className="transition-colors hover:text-ink-soft">
+                Mentions légales
+              </a>
+              <a href="/confidentialite.html" className="transition-colors hover:text-ink-soft">
+                Confidentialité
+              </a>
+              <a href="/cgu.html" className="transition-colors hover:text-ink-soft">
+                CGU
+              </a>
+            </nav>
+            <p>
+              ShyClone 1.0 — <span className="font-mono">mr_shy</span>
+            </p>
+          </footer>
         </aside>
 
         <div className="flex min-h-[420px] flex-col p-4 sm:p-5 lg:min-h-0">
