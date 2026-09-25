@@ -36,7 +36,7 @@ from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 import urllib.request as urllib_request
 from urllib.request import Request
 
-from flask import Flask, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -49,6 +49,13 @@ HOTE = os.environ.get("SHYCLONE_HOST", "127.0.0.1")
 # rien ne change. Renseignée, elle empêche un inconnu de faire télécharger
 # n'importe quel site par votre serveur.
 JETON = os.environ.get("SHYCLONE_TOKEN", "").strip()
+
+# Mot de passe d'accès (authentification HTTP « Basic »). Vide en local : rien
+# ne change. Renseigné, il ferme l'application entière — interface, API et
+# aperçu — sans page de connexion à maintenir : le navigateur retient les
+# identifiants et les renvoie pour l'iframe comme pour le téléchargement.
+MDP = os.environ.get("SHYCLONE_MDP", "").strip()
+UTILISATEUR = os.environ.get("SHYCLONE_UTILISATEUR", "shy").strip()
 
 # Interdit au moteur d'aller chercher une adresse interne (127.x, 10.x, 192.168.x,
 # 169.254.169.254 des métadonnées cloud…). Sans ce filtre, un moteur exposé sur
@@ -132,6 +139,23 @@ def _erreur(exc):
         print(f"[ShyClone] erreur interne : {type(exc).__name__}: {exc}")
         return jsonify({"statut": "error", "message": "Erreur interne."}), 500
     return jsonify({"statut": "error", "message": "Requête invalide."}), code
+
+
+@app.before_request
+def controler_acces():
+    """Ferme l'application derrière un mot de passe, si un mot de passe existe."""
+    if not MDP or request.method == "OPTIONS":
+        return None
+    # La sonde de santé de l'hébergeur passe sans identifiants, sinon le
+    # service est déclaré en panne et redémarré en boucle.
+    if request.path == "/api/health":
+        return None
+    a = request.authorization
+    if (a and a.type == "basic"
+            and secrets.compare_digest(a.username or "", UTILISATEUR)
+            and secrets.compare_digest(a.password or "", MDP)):
+        return None
+    return Response("", 401, {"WWW-Authenticate": 'Basic realm="ShyClone"'})
 
 
 @app.before_request

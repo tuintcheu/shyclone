@@ -9,7 +9,10 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
-      - key: SHYCLONE_TOKEN
-        generateValue: true     # protège /api contre un usage par des inconnus
+      # Mot de passe d'accès à l'application. Render en génère un : relevez-le
+      # dans Environment, l'identifiant est « shy ». Supprimez cette ligne pour
+      # une application ouverte à qui connaît l'URL.
+      - key: SHYCLONE_MDP
+        generateValue: true
       - key: SHYCLONE_RETENTION
         value: "780"            # 13 min avant suppression d'une capture

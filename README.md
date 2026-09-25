@@ -32,6 +32,8 @@ Variables d'environnement reconnues :
 | --- | --- | --- |
 | `PORT` / `SHYCLONE_PORT` | port du moteur Flask | `5000` |
 | `SHYCLONE_HOST` | interface d'écoute du moteur | `127.0.0.1` |
+| `SHYCLONE_MDP` | mot de passe d'accès à l'application (vide = ouverte) | vide |
+| `SHYCLONE_UTILISATEUR` | identifiant associé | `shy` |
 | `SHYCLONE_TOKEN` | jeton exigé sur `/api` (vide = désactivé) | vide |
 | `VITE_API_TOKEN` | jeton envoyé par l'interface | vide |
 | `SHYCLONE_BLOQUER_PRIVE` | refuse les adresses réseau internes | actif si exposé |
@@ -57,6 +59,10 @@ docker run -p 8000:8000 shyclone
 Vous pouvez aussi le créer à la main : Web Service · Docker · Free, `Dockerfile`
 à la racine, health check `/api/health`. Aucune variable à renseigner côté
 interface — elle est servie par le moteur, donc sur la même origine.
+
+Render génère un `SHYCLONE_MDP` : relevez-le dans l'onglet *Environment*, il
+ferme l'application à tout le monde sauf vous. L'identifiant est `shy`.
+Supprimez cette variable pour une application ouverte à qui connaît l'URL.
 
 Les limites du palier gratuit, à connaître avant de s'y engager :
 
@@ -102,10 +108,12 @@ Ce qui est en place :
   local en développement.
 - **Écriture confinée.** Les chemins issus des URL sont assainis et vérifiés :
   rien ne s'écrit ni ne se lit hors du dossier du job.
-- **Accès à l'API.** `SHYCLONE_TOKEN` rend `/api` inaccessible sans jeton.
-  Indispensable sur un moteur public : sinon n'importe qui fait télécharger
-  n'importe quoi par votre serveur, et c'est votre adresse IP qui se fait
-  bannir.
+- **Accès à l'application.** `SHYCLONE_MDP` ferme l'interface, l'API et
+  l'aperçu derrière une authentification HTTP. Indispensable sur un moteur
+  public : sinon n'importe qui fait télécharger n'importe quoi par votre
+  serveur, et c'est votre adresse IP qui se fait bannir. Seule `/api/health`
+  reste ouverte, pour la sonde de l'hébergeur. `SHYCLONE_TOKEN` existe en plus
+  pour un accès programmatique à `/api` sans navigateur.
 - **L'aperçu ne peut pas piloter l'API.** Une requête vers `/api` dont le
   référent est une page capturée est refusée.
 
@@ -119,9 +127,13 @@ Ce qu'il faut savoir :
   clonez que des sites dont vous n'attendez pas ça. Pour une isolation
   complète, servez l'aperçu depuis un autre nom d'hôte et renseignez
   `VITE_PREVIEW_BASE` au build.
-- Le jeton est inscrit dans le bundle de l'interface au build : il écarte les
-  curieux, il ne protège pas d'un visiteur déterminé. Pour un service
-  réellement privé, gardez le dépôt privé et restreignez l'accès en amont.
+- L'authentification HTTP « Basic » transmet le mot de passe à chaque requête :
+  elle ne vaut que derrière HTTPS. Render et les hébergeurs cités le
+  fournissent d'office ; en auto-hébergement, mettez un certificat avant
+  d'exposer quoi que ce soit.
+- `SHYCLONE_TOKEN`, lui, est inscrit dans le bundle de l'interface au build :
+  il écarte les robots, il ne protège pas d'un visiteur déterminé. C'est
+  `SHYCLONE_MDP` qui ferme réellement l'accès.
 - Un dépôt Git public expose l'intégralité de la pile. Si vous tenez à ce que
   personne ne sache comment le site est fait, le dépôt doit être privé.
 
