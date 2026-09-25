@@ -96,7 +96,8 @@ d'aspiration sur Internet.
 
 Ce qui est en place :
 
-- **Pas de signature technique.** L'en-tête `Server` vaut `ShyClone`, les pages
+- **Pas de signature technique.** L'en-tête `Server` vaut `ShyClone` (y compris
+  derrière Gunicorn, voir `gunicorn.conf.py`), les pages
   d'erreur sont du JSON neutre, aucune trace d'exécution ni chemin de fichier
   n'est renvoyé au client, et l'interface ne mentionne aucun outil.
 - **Pas de rebond vers le réseau interne.** Le moteur refuse toute URL qui
