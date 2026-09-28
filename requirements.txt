@@ -1,6 +1,10 @@
 Flask>=3.0
 Flask-Cors>=4.0
 
+# Réutilisation des connexions : rouvrir une connexion TLS par ressource
+# coûtait la moitié du temps de capture.
+requests>=2.31
+
 # Certains CDN répondent en brotli quoi qu'annonce le client. Sans ce paquet,
 # le moteur reçoit des octets illisibles et la capture part en vrille.
 brotli>=1.1

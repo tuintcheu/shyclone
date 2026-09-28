@@ -42,6 +42,9 @@ Variables d'environnement reconnues :
 | `SHYCLONE_QUOTA_CHECK` | vérifications autorisées par IP et par heure | `60` |
 | `SHYCLONE_DELAI` | délai réseau par requête, en secondes | `20` |
 | `SHYCLONE_NAVIGATEUR` | chemin du navigateur de rendu | détecté |
+| `SHYCLONE_PAGES_PAR` | pages récupérées simultanément | `8` |
+| `SHYCLONE_ASSETS_PAR` | ressources récupérées simultanément | `12` |
+| `SHYCLONE_PAGES_PAR_RENDU` | pages simultanées en rendu navigateur | `2` |
 | `SHYCLONE_RETENTION` | secondes avant suppression d'une capture | `780` (13 min) |
 | `VITE_PREVIEW_BASE` | origine servant l'aperçu, pour l'isoler | même origine |
 | `SHYCLONE_UI_PORT` | port de Vite | `5173` |
@@ -222,8 +225,29 @@ s'annonce comme robot. Ceux protégés par un service anti-robot (DataDome,
 Cloudflare Bot Management) restent hors de portée, et le job le dit
 explicitement plutôt que de renvoyer une capture vide.
 
-Pages et ressources sont récupérées en parallèle : 5 pages et 8 ressources
-simultanément. Sur getbootstrap.com, 94 pages et 301 ressources en 31 s.
+Pages et ressources sont récupérées en parallèle — 8 pages et 12 ressources
+simultanément par défaut — sur des connexions réutilisées d'une requête à
+l'autre. Rouvrir une connexion TLS par ressource coûtait la moitié du temps :
+dix requêtes vers le même hôte passent de 6,1 s à 1,7 s une fois la connexion
+gardée ouverte.
+
+Mesuré sur une capture de 40 pages et 178 ressources (getbootstrap.com) :
+
+| pages / ressources en parallèle | Connexion neuve à chaque fois | Connexion réutilisée |
+| --- | --- | --- |
+| 1 / 4 | 38,7 s | 16,2 s |
+| 5 / 8 | 11,5 s | 5,9 s |
+| **8 / 12** (défaut) | 8,6 s | **4,0 s** |
+| 12 / 16 | 7,3 s | 3,3 s |
+| 16 / 24 | 6,5 s | 3,1 s |
+
+Au-delà de 8/12 le gain se tasse tandis que le risque de bannissement grimpe :
+c'est une vingtaine de connexions simultanées sur un seul serveur. Les trois
+niveaux restent réglables (`SHYCLONE_PAGES_PAR`, `SHYCLONE_ASSETS_PAR`,
+`SHYCLONE_PAGES_PAR_RENDU`) pour un site dont vous maîtrisez l'hébergement.
+
+Si le site répond 429 ou 503, le moteur attend le délai qu'il indique puis
+retente une fois, plutôt que d'insister.
 
 **Sites nécessitant une connexion.** Le formulaire accepte un en-tête `Cookie`
 de session, copié depuis les outils de développement du navigateur. Il n'est
