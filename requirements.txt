@@ -5,6 +5,10 @@ Flask-Cors>=4.0
 # coûtait la moitié du temps de capture.
 requests>=2.31
 
+# Importé directement pour taire l'avertissement des tentatives sans
+# vérification du certificat, déjà signalées dans le journal du job.
+urllib3>=2.0
+
 # Certains CDN répondent en brotli quoi qu'annonce le client. Sans ce paquet,
 # le moteur reçoit des octets illisibles et la capture part en vrille.
 brotli>=1.1
