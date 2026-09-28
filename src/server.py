@@ -819,6 +819,8 @@ class Crawler:
                 nom = chemin_local(url, False, job.hote).rsplit("/", 1)[-1]
                 if self.ecrire(nom, brut):
                     job.entree = nom
+                    if mime:
+                        job.types[nom] = mime
                     with self.verrou_pages:
                         job.pages += 1
                     job.journal(f"Fichier capturé ({mime or 'type inconnu'}) — {nom}", "ok")
