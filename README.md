@@ -217,6 +217,26 @@ transmis qu'au domaine capturé — jamais aux ressources externes, sans quoi la
 session de l'utilisateur partirait chez des tiers — n'apparaît dans aucune
 réponse de l'API et disparaît avec la capture.
 
+**Certificats TLS.** Une chaîne de certificats incomplète ou expirée — fréquent
+sur les hébergements régionaux — ne fait plus échouer la capture : le moteur
+réessaie sans vérifier et le signale dans le journal. Jamais lorsqu'une session
+est transmise, ce serait l'exposer à une interception.
+
+**Domaine sans enregistrement DNS.** `www.mtn.cm` n'existe pas quand `mtn.cm`
+existe : le moteur bascule automatiquement sur la variante qui résout.
+
+**Ressources demandées à la racine.** Le JavaScript d'un site reconstruit
+souvent ses URL à l'exécution (`/_next/…`, `/assets/…`), hors du dossier de la
+capture. Le moteur rattache ces requêtes à leur capture grâce au référent, et
+renvoie une vraie 404 quand le fichier manque au lieu de servir l'interface.
+
+**Sites construits en JavaScript.** Quand la page capturée ne contient presque
+aucun texte hors scripts, le journal prévient que la capture risque d'être
+incomplète. Un site dont le contenu est assemblé par le navigateur, avec
+découpage du code en morceaux chargés à la demande, ne peut pas être capturé
+par une lecture statique du HTML : les noms de ces morceaux sont calculés à
+l'exécution.
+
 **Adresse pointant sur un fichier.** Si l'URL de départ désigne un PDF, une
 image ou une archive plutôt qu'une page, le fichier est conservé tel quel au
 lieu de faire échouer la capture.

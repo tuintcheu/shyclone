@@ -19,6 +19,7 @@ import ipaddress
 import os
 import secrets
 import socket
+import ssl
 import tempfile
 import posixpath
 import re
@@ -165,7 +166,13 @@ def entetes_reponse(reponse):
     """Aucune signature de la pile technique, et quelques en-têtes de sécurité."""
     reponse.headers["Server"] = "ShyClone"
     reponse.headers["X-Content-Type-Options"] = "nosniff"
-    reponse.headers["Referrer-Policy"] = "no-referrer"
+    # « no-referrer » partout, sauf pour les pages d'aperçu : le référent est
+    # ce qui permet de rattacher à leur capture les ressources que le JS du
+    # site demande à la racine du serveur. « same-origin » ne le divulgue
+    # qu'à nous-mêmes.
+    reponse.headers["Referrer-Policy"] = (
+        "same-origin" if request.path.startswith("/preview/") else "no-referrer"
+    )
     reponse.headers.pop("X-Powered-By", None)
     if FORCER_HTTPS:
         reponse.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -347,6 +354,47 @@ class ControleRedirection(urllib_request.HTTPRedirectHandler):
 
 OUVREUR = urllib_request.build_opener(ControleRedirection)
 
+# Beaucoup de sites régionaux présentent une chaîne de certificats incomplète
+# ou expirée. Plutôt que d'échouer, on réessaie sans vérifier — mais jamais
+# lorsqu'une session est transmise : ce serait l'exposer à une interception.
+_contexte_souple = ssl.create_default_context()
+_contexte_souple.check_hostname = False
+_contexte_souple.verify_mode = ssl.CERT_NONE
+OUVREUR_SOUPLE = urllib_request.build_opener(
+    ControleRedirection, urllib_request.HTTPSHandler(context=_contexte_souple)
+)
+
+
+def hote_alternatif(url):
+    """Renvoie la même URL avec ou sans « www. », ou None."""
+    p = urlsplit(url)
+    hote = p.netloc
+    autre = hote[4:] if hote.lower().startswith("www.") else "www." + hote
+    return urlunsplit((p.scheme, autre, p.path, p.query, "")) if autre != hote else None
+
+
+def resoudre(hote):
+    try:
+        socket.getaddrinfo(hote, None, proto=socket.IPPROTO_TCP)
+        return True
+    except socket.gaierror:
+        return False
+
+
+def corriger_hote(url):
+    """Bascule vers la variante www quand le domaine saisi ne résout pas.
+
+    www.mtn.cm n'a pas d'enregistrement DNS alors que mtn.cm en a un : sans ce
+    repli, l'adresse que tout le monde tape est déclarée injoignable.
+    """
+    p = urlsplit(url)
+    if not p.hostname or resoudre(p.hostname):
+        return url
+    autre = hote_alternatif(url)
+    if autre and resoudre(urlsplit(autre).hostname):
+        return autre
+    return url
+
 
 def decompresser(donnees, encodage):
     """Décompresse la réponse.
@@ -391,14 +439,23 @@ def telecharger(url, cookies=None):
     if cookies:
         entetes["Cookie"] = cookies
     requete = Request(url, headers=entetes)
-    with OUVREUR.open(requete, timeout=DELAI) as reponse:
-        brut = decompresser(
-            reponse.read(),
-            (reponse.headers.get("Content-Encoding") or "").strip().lower(),
-        )
-        entete = reponse.headers.get("Content-Type") or ""
-        mime = entete.split(";")[0].strip().lower()
-        return brut, mime, entete, reponse.geturl()
+
+    def lire(ouvreur):
+        with ouvreur.open(requete, timeout=DELAI) as reponse:
+            brut = decompresser(
+                reponse.read(),
+                (reponse.headers.get("Content-Encoding") or "").strip().lower(),
+            )
+            entete = reponse.headers.get("Content-Type") or ""
+            return brut, entete.split(";")[0].strip().lower(), entete, reponse.geturl()
+
+    try:
+        return lire(OUVREUR) + (False,)
+    except URLError as exc:
+        certificat = isinstance(getattr(exc, "reason", None), ssl.SSLError)
+        if not certificat or cookies:
+            raise
+        return lire(OUVREUR_SOUPLE) + (True,)
 
 
 def message_erreur(exc):
@@ -431,6 +488,10 @@ class Job:
         # En-tête Cookie fourni par l'utilisateur pour capturer un espace
         # auquel il a accès. Jamais journalisé, jamais renvoyé par l'API.
         self.cookies = cookies or None
+        # Type MIME réel de chaque fichier capturé. Une ressource issue d'une
+        # URL sans extension (…/gtag/js?id=X) serait sinon servie en
+        # application/octet-stream, et le navigateur refuserait de l'exécuter.
+        self.types = {}
         self.url = url
         self.hote = urlsplit(url).netloc
         self.pages_max = pages_max
@@ -505,6 +566,7 @@ RE_ATTR_INTEGRITE = re.compile(
     r"""\s+(?:integrity|crossorigin|nonce)\s*=\s*(["']).*?\1""", re.I | re.S
 )
 RE_CROSSORIGIN_NU = re.compile(r"\s+crossorigin(?=[\s/]|$)", re.I)
+RE_SANS_BALISES = re.compile(r"<[^>]+>")
 
 
 class Crawler:
@@ -528,6 +590,7 @@ class Crawler:
         self.futures = set()
         self.codes_http = set()
         self.hote_verifie = False
+        self.tls_signale = False
         self.verrou_pages = threading.Lock()
         self.actifs = 0
         self.echecs = 0
@@ -618,7 +681,7 @@ class Crawler:
         if self.job.arret.is_set():
             return
         try:
-            brut, mime, entete, _ = telecharger(url, self.cookies_pour(url))
+            brut, mime, entete, _, _ = telecharger(url, self.cookies_pour(url))
         except Exception as exc:
             self.job.journal(f"Ressource ignorée ({message_erreur(exc)}) : {url}", "warn")
             return
@@ -632,6 +695,8 @@ class Crawler:
         if ecrit:
             with self.verrou:
                 self.job.assets += 1
+                if mime:
+                    self.job.types[relatif] = mime
 
     def attendre_assets(self):
         """Laisse les téléchargements en cours se terminer.
@@ -722,7 +787,15 @@ class Crawler:
         """Récupère, réécrit et écrit une page. Appelée par plusieurs workers."""
         job = self.job
         try:
-            brut, mime, entete, url_finale = telecharger(url, self.cookies_pour(url))
+            brut, mime, entete, url_finale, tls_souple = telecharger(
+                url, self.cookies_pour(url)
+            )
+            if tls_souple and not self.tls_signale:
+                self.tls_signale = True
+                job.journal(
+                    "Certificat TLS non vérifiable — capture poursuivie sans "
+                    "contrôle du certificat.", "warn",
+                )
         except HTTPError as exc:
             with self.verrou_pages:
                 self.echecs += 1
@@ -770,11 +843,30 @@ class Crawler:
                 job.hote = hote_final
 
         html = self.reecrire_html(decoder(brut, entete), url_finale, relatif)
+        if premiere:
+            self.avertir_si_coquille(html)
         if self.ecrire(relatif, html, texte=True):
             with self.verrou_pages:
                 job.pages += 1
                 numero = job.pages
             job.journal(f"Page {numero} — {relatif}", "ok")
+
+    def avertir_si_coquille(self, html):
+        """Prévient quand la page n'a quasiment pas de texte hors JavaScript.
+
+        Une application qui construit son contenu côté navigateur ne livre
+        qu'une coquille : la capture réussit techniquement mais donne une page
+        presque vide. Mieux vaut le dire que de laisser croire à un succès.
+        """
+        sans_js = RE_SCRIPT_BLOC.sub(" ", html)
+        sans_js = RE_STYLE_BLOC.sub(" ", sans_js)
+        texte = re.sub(r"\s+", " ", RE_SANS_BALISES.sub(" ", sans_js)).strip()
+        scripts = len(RE_SCRIPT_BLOC.findall(html)) + html.lower().count("<script src")
+        if len(texte) < 500 and scripts >= 3:
+            self.job.journal(
+                "Ce site construit son contenu en JavaScript : la capture "
+                "risque d'être incomplète.", "warn",
+            )
 
     def boucle_pages(self):
         """Worker : dépile des pages jusqu'à épuisement de la file."""
@@ -912,8 +1004,9 @@ def check():
     p = urlsplit(url)
     if p.scheme not in ("http", "https") or not p.netloc:
         return jsonify({"ok": False, "raison": "URL invalide."}), 400
+    url = corriger_hote(url)
     try:
-        _, _, _, finale = telecharger(url)
+        _, _, _, finale, _ = telecharger(url)
         return jsonify({"ok": True, "url": finale})
     except HTTPError as exc:
         if exc.code in (401, 403, 405, 429):
@@ -936,6 +1029,7 @@ def clone():
     p = urlsplit(url)
     if p.scheme not in ("http", "https") or not p.netloc:
         return jsonify({"statut": "error", "message": "URL invalide."}), 400
+    url = corriger_hote(url)
 
     try:
         pages_max = int(data.get("pages_max") or PAGES_DEFAUT)
@@ -1024,7 +1118,7 @@ def preview(job_id, relatif=None):
     if chemin_sur(job.dossier, relatif) is None:
         return "Chemin refusé", 403
     try:
-        return send_from_directory(job.dossier, relatif)
+        return send_from_directory(job.dossier, relatif, mimetype=job.types.get(relatif))
     except Exception:
         return "Fichier absent de la capture", 404
 
@@ -1035,6 +1129,20 @@ def interface(chemin=""):
     """Sert l'interface compilée (dist/) depuis le même service que l'API."""
     if chemin.startswith(("api/", "preview/")):
         return jsonify({"statut": "error", "message": "Ressource introuvable."}), 404
+
+    # Le JS d'un site capturé reconstruit souvent des URL absolues (/_next/…,
+    # /assets/…) qui sortent du dossier de la capture. Quand la requête vient
+    # d'une page d'aperçu, on la redirige vers le dossier du job. Et si le
+    # fichier manque, on renvoie une vraie 404 : lui servir l'interface ferait
+    # échouer le navigateur sur un type MIME inattendu.
+    venant = re.match(r"^/preview/([0-9a-f]{12})/", urlsplit(request.headers.get("Referer", "")).path)
+    if venant:
+        job = JOBS.get(venant.group(1))
+        if job and job.dossier.is_dir():
+            cible = chemin_sur(job.dossier, chemin)
+            if cible is not None and cible.is_file():
+                return send_from_directory(job.dossier, chemin, mimetype=job.types.get(chemin))
+        return jsonify({"statut": "error", "message": "Ressource absente de la capture."}), 404
     if not DOSSIER_UI.is_dir():
         return jsonify({"statut": "error", "message": "Interface indisponible."}), 503
     if chemin:
