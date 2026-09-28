@@ -20,6 +20,9 @@ export function CloneForm({
   onPagesMaxChange,
   cookies,
   onCookiesChange,
+  renduJs,
+  onRenduJsChange,
+  renduDisponible,
   status,
   engineDown,
   onSubmit,
@@ -135,6 +138,30 @@ export function CloneForm({
           })}
         </div>
       </div>
+
+      {renduDisponible && (
+        <label
+          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors ${
+            renduJs ? 'border-accent/50 bg-accent/8' : 'border-line bg-raised hover:border-line-strong'
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={renduJs}
+            onChange={e => onRenduJsChange(e.target.checked)}
+            disabled={enCours || verifie}
+            className="mt-0.5 size-4 shrink-0 accent-accent"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-xs font-semibold text-ink">Rendu JavaScript</span>
+            <span className="text-xs leading-relaxed text-ink-faint">
+              Pour les sites qui construisent leur contenu dans le navigateur.
+              Plus lent, et la capture est fidèle mais figée : ses scripts sont
+              neutralisés, sans quoi la page se viderait à l'affichage.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="flex flex-col gap-2">
         <button

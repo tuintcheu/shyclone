@@ -16,6 +16,18 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Rendu des sites construits en JavaScript. Optionnel : il ajoute environ
+# 350 Mo à l'image et demande 300 Mo de mémoire à l'exécution, ce qui ne tient
+# pas sur une instance gratuite de 512 Mo.
+#   docker build --build-arg AVEC_NAVIGATEUR=1 -t shyclone .
+ARG AVEC_NAVIGATEUR=0
+RUN if [ "$AVEC_NAVIGATEUR" = "1" ]; then \
+      apt-get update && \
+      apt-get install -y --no-install-recommends chromium fonts-liberation && \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+ENV SHYCLONE_NAVIGATEUR=/usr/bin/chromium
+
 COPY src/ ./src/
 COPY gunicorn.conf.py ./
 COPY --from=interface /build/dist ./dist

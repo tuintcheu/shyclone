@@ -82,7 +82,7 @@ export function useCloneJob({ onFinish, onUnreachable } = {}) {
     }
   }, [arreterPolling, onFinish])
 
-  const start = useCallback(async (url, pagesMax, cookies) => {
+  const start = useCallback(async (url, pagesMax, cookies, renduJs) => {
     arreterPolling()
     curseurRef.current = 0
     echecsRef.current = 0
@@ -96,7 +96,7 @@ export function useCloneJob({ onFinish, onUnreachable } = {}) {
         onUnreachable?.(verif.raison || "Le site n'a pas répondu.")
         return
       }
-      const { job_id: id } = await startClone(url, pagesMax, cookies)
+      const { job_id: id } = await startClone(url, pagesMax, cookies, renduJs)
       jobRef.current = id
       setJob(j => ({ ...j, status: 'running', jobId: id }))
       pollRef.current = setInterval(sonder, POLL_MS)

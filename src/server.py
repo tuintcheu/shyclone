@@ -42,6 +42,7 @@ try:
 except ImportError:                     # dépendance facultative
     brotli = None
 
+import navigateur as nav
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
 
@@ -98,6 +99,7 @@ ENTETES = {
 }
 ASSETS_PARALLELES = 8      # téléchargements de ressources simultanés
 PAGES_PARALLELES = 5       # pages récupérées simultanément
+PAGES_PARALLELES_RENDU = 2 # en rendu navigateur : un onglet coûte cher
 CODES_BLOCAGE = (401, 403, 429)
 # Délai réseau par requête. Relevé à 20 s : certains hébergements régionaux
 # répondent lentement, et un timeout court les faisait passer pour injoignables.
@@ -483,7 +485,7 @@ def message_erreur(exc):
 
 # ── Modèle de job ────────────────────────────────────────────────────────────
 class Job:
-    def __init__(self, url, pages_max, cookies=None):
+    def __init__(self, url, pages_max, cookies=None, rendu_js=False):
         self.id = uuid.uuid4().hex[:12]
         # En-tête Cookie fourni par l'utilisateur pour capturer un espace
         # auquel il a accès. Jamais journalisé, jamais renvoyé par l'API.
@@ -492,6 +494,9 @@ class Job:
         # URL sans extension (…/gtag/js?id=X) serait sinon servie en
         # application/octet-stream, et le navigateur refuserait de l'exécuter.
         self.types = {}
+        # Rendu par un vrai navigateur : indispensable pour les sites qui
+        # assemblent leur contenu en JavaScript.
+        self.rendu_js = bool(rendu_js)
         self.url = url
         self.hote = urlsplit(url).netloc
         self.pages_max = pages_max
@@ -531,6 +536,7 @@ class Job:
             "octets": self.octets,
             "duree": round(duree, 1),
             "erreur": self.erreur,
+            "rendu_js": self.rendu_js,
             "retention": RETENTION,
             "expire_dans": (
                 max(0, round(self.expire_a - time.time())) if self.expire_a else None
@@ -567,6 +573,7 @@ RE_ATTR_INTEGRITE = re.compile(
 )
 RE_CROSSORIGIN_NU = re.compile(r"\s+crossorigin(?=[\s/]|$)", re.I)
 RE_SANS_BALISES = re.compile(r"<[^>]+>")
+RE_SCRIPT_ORPHELIN = re.compile(r"<script\b[^>]*/?>", re.I)
 
 
 class Crawler:
@@ -579,8 +586,9 @@ class Crawler:
     une par une.
     """
 
-    def __init__(self, job):
+    def __init__(self, job, navigateur=None):
         self.job = job
+        self.navigateur = navigateur
         self.file = deque()
         self.pages_connues = {}   # url normalisée -> chemin local
         self.chemins_pages = set()
@@ -669,6 +677,15 @@ class Crawler:
         if nouveau:
             self.planifier(cle, relatif, profondeur)
         return lien_relatif(relatif, fichier_relatif)
+
+    def planifier_observees(self, urls, page_relative):
+        """Programme les ressources que le navigateur a réellement demandées.
+
+        C'est ce qui rattrape les morceaux de code dont le nom est calculé à
+        l'exécution : ils n'apparaissent dans aucun attribut du HTML.
+        """
+        for adresse in urls:
+            self.ref_asset(adresse, adresse, page_relative)
 
     def planifier(self, url, relatif, profondeur):
         if self.job.arret.is_set() or self.pool is None:
@@ -786,10 +803,17 @@ class Crawler:
     def traiter_page(self, url, relatif):
         """Récupère, réécrit et écrit une page. Appelée par plusieurs workers."""
         job = self.job
+        observees = []
         try:
-            brut, mime, entete, url_finale, tls_souple = telecharger(
-                url, self.cookies_pour(url)
-            )
+            if self.navigateur:
+                html_rendu, observees, url_finale = self.navigateur.rendre(
+                    url, self.cookies_pour(url)
+                )
+                brut, mime, entete, tls_souple = b"", "text/html", "text/html", False
+            else:
+                brut, mime, entete, url_finale, tls_souple = telecharger(
+                    url, self.cookies_pour(url)
+                )
             if tls_souple and not self.tls_signale:
                 self.tls_signale = True
                 job.journal(
@@ -844,8 +868,27 @@ class Crawler:
                 )
                 job.hote = hote_final
 
-        html = self.reecrire_html(decoder(brut, entete), url_finale, relatif)
-        if premiere:
+        if self.navigateur:
+            # Le DOM rendu est sauvegardé sans ses scripts. Les laisser serait
+            # contre-productif : une application hydratée détecte que le DOM
+            # enregistré ne correspond pas à ce qu'elle attend, efface la page
+            # et la reconstruit — sans ses données, elle finit vide. Sans eux,
+            # la capture est une photographie fidèle, mais figée.
+            source = RE_SCRIPT_ORPHELIN.sub("", RE_SCRIPT_BLOC.sub("", html_rendu))
+            if premiere:
+                job.journal(
+                    "Rendu navigateur : scripts neutralisés, la capture est "
+                    "fidèle mais non interactive.", "info",
+                )
+        else:
+            source = decoder(brut, entete)
+        if observees:
+            # Les ressources vues par le navigateur sont programmées avant la
+            # réécriture : celles qui figurent aussi dans le HTML réutilisent
+            # simplement le chemin déjà réservé.
+            self.planifier_observees(observees, relatif)
+        html = self.reecrire_html(source, url_finale, relatif)
+        if premiere and not self.navigateur:
             self.avertir_si_coquille(html)
         if self.ecrire(relatif, html, texte=True):
             with self.verrou_pages:
@@ -907,11 +950,12 @@ class Crawler:
         self.pool = ThreadPoolExecutor(
             max_workers=ASSETS_PARALLELES, thread_name_prefix="shyclone-asset"
         )
+        ouvriers = PAGES_PARALLELES_RENDU if self.navigateur else PAGES_PARALLELES
         pool_pages = ThreadPoolExecutor(
-            max_workers=PAGES_PARALLELES, thread_name_prefix="shyclone-page"
+            max_workers=ouvriers, thread_name_prefix="shyclone-page"
         )
         try:
-            wait([pool_pages.submit(self.boucle_pages) for _ in range(PAGES_PARALLELES)])
+            wait([pool_pages.submit(self.boucle_pages) for _ in range(ouvriers)])
             if job.pages and not job.arret.is_set():
                 job.journal("Pages capturées — récupération des ressources…", "info")
             self.attendre_assets()
@@ -974,7 +1018,15 @@ def executer_job(job):
     try:
         shutil.rmtree(job.dossier, ignore_errors=True)
         job.dossier.mkdir(parents=True, exist_ok=True)
-        Crawler(job).executer()
+        navigateur = None
+        try:
+            if job.rendu_js:
+                job.journal("Démarrage du navigateur de rendu…", "info")
+                navigateur = nav.Navigateur().demarrer()
+            Crawler(job, navigateur).executer()
+        finally:
+            if navigateur:
+                navigateur.arreter()
         if job.arret.is_set():
             job.statut = "aborted"
             job.journal("Interrompu à la demande de l'utilisateur.", "warn")
@@ -995,7 +1047,7 @@ def executer_job(job):
 # ── Routes ───────────────────────────────────────────────────────────────────
 @app.get("/api/health")
 def health():
-    return jsonify({"statut": "ok", "version": "1.0"})
+    return jsonify({"statut": "ok", "version": "1.0", "rendu_js": nav.disponible()})
 
 
 @app.post("/api/check")
@@ -1039,9 +1091,10 @@ def clone():
         pages_max = PAGES_DEFAUT
     pages_max = max(1, min(pages_max, PAGES_MAX))
     cookies = (data.get("cookies") or "").strip().replace("\n", " ")[:4096] or None
+    rendu_js = bool(data.get("rendu_js")) and nav.disponible()
 
     purger_anciens_jobs()
-    job = Job(url, pages_max, cookies)
+    job = Job(url, pages_max, cookies, rendu_js)
     with VERROU_JOBS:
         JOBS[job.id] = job
     threading.Thread(target=executer_job, args=(job,), daemon=True).start()

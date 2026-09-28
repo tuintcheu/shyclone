@@ -7,6 +7,7 @@ const INTERVALLE = 5000
  *  « actif » alors que Flask est arrêté. */
 export function useEngineHealth() {
   const [state, setState] = useState('unknown')
+  const [rendu, setRendu] = useState(false)
 
   useEffect(() => {
     let vivant = true
@@ -14,8 +15,11 @@ export function useEngineHealth() {
 
     const sonder = async () => {
       try {
-        await engineHealth(controller.signal)
-        if (vivant) setState('up')
+        const sante = await engineHealth(controller.signal)
+        if (vivant) {
+          setState('up')
+          setRendu(Boolean(sante.rendu_js))
+        }
       } catch (err) {
         if (vivant && err.name !== 'AbortError') setState('down')
       }
@@ -30,5 +34,5 @@ export function useEngineHealth() {
     }
   }, [])
 
-  return state
+  return { state, rendu }
 }

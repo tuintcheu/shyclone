@@ -41,6 +41,7 @@ Variables d'environnement reconnues :
 | `SHYCLONE_QUOTA_CLONE` | captures autorisées par IP et par heure | `12` |
 | `SHYCLONE_QUOTA_CHECK` | vérifications autorisées par IP et par heure | `60` |
 | `SHYCLONE_DELAI` | délai réseau par requête, en secondes | `20` |
+| `SHYCLONE_NAVIGATEUR` | chemin du navigateur de rendu | détecté |
 | `SHYCLONE_RETENTION` | secondes avant suppression d'une capture | `780` (13 min) |
 | `VITE_PREVIEW_BASE` | origine servant l'aperçu, pour l'isoler | même origine |
 | `SHYCLONE_UI_PORT` | port de Vite | `5173` |
@@ -55,6 +56,13 @@ la sert depuis le même processus que l'API. Une image, un port, une URL.
 ```bash
 docker build -t shyclone .
 docker run -p 8000:8000 shyclone
+```
+
+Pour y inclure le navigateur de rendu — environ 350 Mo d'image et 300 Mo de
+mémoire en plus, à réserver à une instance qui en a les moyens :
+
+```bash
+docker build --build-arg AVEC_NAVIGATEUR=1 -t shyclone .
 ```
 
 ### Gratuit, sur Render
@@ -230,12 +238,31 @@ souvent ses URL à l'exécution (`/_next/…`, `/assets/…`), hors du dossier d
 capture. Le moteur rattache ces requêtes à leur capture grâce au référent, et
 renvoie une vraie 404 quand le fichier manque au lieu de servir l'interface.
 
-**Sites construits en JavaScript.** Quand la page capturée ne contient presque
-aucun texte hors scripts, le journal prévient que la capture risque d'être
-incomplète. Un site dont le contenu est assemblé par le navigateur, avec
-découpage du code en morceaux chargés à la demande, ne peut pas être capturé
-par une lecture statique du HTML : les noms de ces morceaux sont calculés à
-l'exécution.
+**Sites construits en JavaScript.** Une lecture statique du HTML ne peut rien
+en tirer : le contenu est assemblé par le navigateur, et les morceaux de code
+portent des noms calculés à l'exécution, introuvables dans la page.
+
+L'option **Rendu JavaScript** ouvre alors un vrai navigateur sans interface. Il
+en tire le DOM après exécution des scripts, et surtout la liste des ressources
+réellement demandées — c'est ce qui rattrape les morceaux de code invisibles à
+l'analyse. Mesures sur une capture d'une page, part du texte restituée :
+
+| Site | Capture statique | Rendu navigateur |
+| --- | --- | --- |
+| react.dev | 0,12 | **1,00** |
+| app.diagrams.net | 0,59 | **1,00** |
+| excalidraw.com | 0,76 | **1,02** |
+| getbootstrap.com | 0,99 | **1,00** |
+
+Le rendu est quatre à sept fois plus lent, et la capture est **figée** : ses
+scripts sont retirés. Les laisser serait contre-productif — une application
+hydratée constate que le DOM enregistré ne correspond pas à ce qu'elle attend,
+efface la page et la reconstruit, sans ses données. Sans eux, la capture est
+une photographie fidèle, mais non interactive.
+
+L'option n'apparaît dans l'interface que si un navigateur est disponible. Hors
+rendu navigateur, le journal prévient simplement quand la page capturée n'a
+presque aucun texte hors scripts.
 
 **Adresse pointant sur un fichier.** Si l'URL de départ désigne un PDF, une
 image ou une archive plutôt qu'une page, le fichier est conservé tel quel au

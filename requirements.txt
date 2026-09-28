@@ -5,6 +5,11 @@ Flask-Cors>=4.0
 # le moteur reçoit des octets illisibles et la capture part en vrille.
 brotli>=1.1
 
+# Dialogue avec le navigateur de rendu. Sans ce paquet ni navigateur installé,
+# le moteur fonctionne en capture statique, qui suffit aux sites rendus côté
+# serveur.
+websocket-client>=1.7
+
 # Serveur de production, utilisé par le Dockerfile. Inutile en local :
 # start.sh lance le serveur de développement de Flask.
 gunicorn>=21.2

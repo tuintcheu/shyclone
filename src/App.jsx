@@ -18,12 +18,13 @@ const PAGES_DEFAUT = 50
 
 export default function App() {
   const { theme, toggle } = useTheme()
-  const engine = useEngineHealth()
+  const { state: engine, rendu: renduDisponible } = useEngineHealth()
   const { toasts, push, dismiss } = useToasts()
 
   const [url, setUrl] = useState('')
   const [mode, setMode] = useState('site')
   const [cookies, setCookies] = useState('')
+  const [renduJs, setRenduJs] = useState(false)
   const [pagesMax, setPagesMax] = useState(String(PAGES_DEFAUT))
   const [viewport, setViewport] = useState('desktop')
   const [injoignable, setInjoignable] = useState(null)
@@ -64,8 +65,8 @@ export default function App() {
     setExpire(false)
     // « Page seule » : le moteur s'arrête après l'adresse saisie, ses styles et
     // ses images étant de toute façon récupérés.
-    start(adresse, mode === 'page' ? 1 : budget, cookies.trim())
-  }, [url, pagesMax, mode, cookies, start])
+    start(adresse, mode === 'page' ? 1 : budget, cookies.trim(), renduJs)
+  }, [url, pagesMax, mode, cookies, renduJs, start])
 
   // Dernière page réellement écrite, affichée sous la maquette animée.
   const pageCourante = useMemo(() => {
@@ -97,6 +98,9 @@ export default function App() {
             onPagesMaxChange={setPagesMax}
             cookies={cookies}
             onCookiesChange={setCookies}
+            renduJs={renduJs}
+            onRenduJsChange={setRenduJs}
+            renduDisponible={renduDisponible}
             status={job.status}
             engineDown={engine === 'down'}
             onSubmit={lancer}
