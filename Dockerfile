@@ -16,9 +16,8 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Rendu des sites construits en JavaScript. Optionnel : il ajoute environ
-# 350 Mo à l'image et demande 300 Mo de mémoire à l'exécution, ce qui ne tient
-# pas sur une instance gratuite de 512 Mo.
+# Rendu des sites construits en JavaScript. Optionnel : mesuré, il porte
+# l'image de 202 Mo à 1,22 Go et la mémoire à 302 Mo au pic d'une capture.
 #   docker build --build-arg AVEC_NAVIGATEUR=1 -t shyclone .
 ARG AVEC_NAVIGATEUR=0
 RUN if [ "$AVEC_NAVIGATEUR" = "1" ]; then \

@@ -58,12 +58,18 @@ docker build -t shyclone .
 docker run -p 8000:8000 shyclone
 ```
 
-Pour y inclure le navigateur de rendu — environ 350 Mo d'image et 300 Mo de
-mémoire en plus, à réserver à une instance qui en a les moyens :
+Pour y inclure le navigateur de rendu :
 
 ```bash
 docker build --build-arg AVEC_NAVIGATEUR=1 -t shyclone .
 ```
+
+Mesuré sur l'image construite : **1,22 Go contre 202 Mo** sans le navigateur,
+et **302 Mo de mémoire au pic** d'une capture (55 Mo au repos). La mémoire
+tient sur une instance gratuite de 512 Mo ; c'est la taille de l'image qui
+devient l'obstacle. Réservez cette variante à un hébergement qui en a les
+moyens, et gardez l'image ordinaire ailleurs — sans navigateur, l'option
+n'apparaît simplement pas dans l'interface.
 
 ### Gratuit, sur Render
 
@@ -255,7 +261,8 @@ l'analyse. Mesures sur une capture d'une page, part du texte restituée :
 | getbootstrap.com | 0,99 | **1,00** |
 
 Le rendu est quatre à sept fois plus lent, et la capture est **figée** : ses
-scripts sont retirés. Les laisser serait contre-productif — une application
+scripts sont retirés — une page capturée en rendu navigateur ne contient plus
+aucune balise `<script>`, là où la capture statique les conserve toutes. Les laisser serait contre-productif — une application
 hydratée constate que le DOM enregistré ne correspond pas à ce qu'elle attend,
 efface la page et la reconstruit, sans ses données. Sans eux, la capture est
 une photographie fidèle, mais non interactive.
