@@ -85,6 +85,21 @@ Render génère un `SHYCLONE_MDP` : relevez-le dans l'onglet *Environment*, il
 ferme l'application à tout le monde sauf vous. L'identifiant est `shy`.
 Supprimez cette variable pour une application ouverte à qui connaît l'URL.
 
+L'environnement Render a été rejoué localement — port injecté par `PORT`, mot
+de passe généré, en-tête `X-Forwarded-Proto` du proxy — avec ces résultats :
+
+| Situation | Attendu | Obtenu |
+| --- | --- | --- |
+| sonde `/api/health`, sans identifiants | 200 | 200 |
+| visiteur sans identifiants | 401 | 401 |
+| visiteur avec identifiants | 200 | 200 |
+| requête en clair | 308 vers HTTPS | 308 |
+| capture de 15 pages derrière le mot de passe | réussie | 15 pages, 170 ressources, 6,3 s |
+
+Mémoire du conteneur pendant la capture : 82 Mo, loin des 512 Mo du palier
+gratuit. Ces essais valident l'image et la configuration, pas le compte Render
+lui-même : le blueprint n'a jamais été soumis à leur API.
+
 Les limites du palier gratuit, à connaître avant de s'y engager :
 
 - le service s'endort après 15 minutes sans trafic ; la première capture qui
