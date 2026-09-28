@@ -81,9 +81,24 @@ Vous pouvez aussi le créer à la main : Web Service · Docker · Free, `Dockerf
 à la racine, health check `/api/health`. Aucune variable à renseigner côté
 interface — elle est servie par le moteur, donc sur la même origine.
 
-Render génère un `SHYCLONE_MDP` : relevez-le dans l'onglet *Environment*, il
-ferme l'application à tout le monde sauf vous. L'identifiant est `shy`.
-Supprimez cette variable pour une application ouverte à qui connaît l'URL.
+Le service est **ouvert à tous** par défaut : n'importe quel visiteur peut
+lancer une capture, dans la limite de douze par heure et par adresse IP.
+
+Pour le réserver à vous seul, ajoutez `SHYCLONE_MDP` dans l'onglet
+*Environment* avec le mot de passe de votre choix. L'interface, l'API et
+l'aperçu le réclament alors, l'identifiant étant `shy`. Seule `/api/health`
+reste ouverte, faute de quoi Render déclare le service en panne et le
+redémarre en boucle.
+
+Ouvrir le service au public a trois conséquences à peser :
+
+- **Votre serveur télécharge ce qu'on lui demande.** Les sites visés voient
+  l'adresse IP de votre hébergement, pas celle du visiteur. C'est elle qui se
+  fait bannir en cas d'abus.
+- **Les pages légales deviennent obligatoires**, et leurs emplacements « à
+  compléter » doivent l'être avant la mise en ligne.
+- **La bande passante et la mémoire sont partagées** par tous les visiteurs, sur
+  une instance gratuite de 512 Mo.
 
 L'environnement Render a été rejoué localement — port injecté par `PORT`, mot
 de passe généré, en-tête `X-Forwarded-Proto` du proxy — avec ces résultats :

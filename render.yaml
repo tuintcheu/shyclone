@@ -9,10 +9,13 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
-      # Mot de passe d'accès à l'application. Render en génère un : relevez-le
-      # dans Environment, l'identifiant est « shy ». Supprimez cette ligne pour
-      # une application ouverte à qui connaît l'URL.
-      - key: SHYCLONE_MDP
-        generateValue: true
       - key: SHYCLONE_RETENTION
         value: "780"            # 13 min avant suppression d'une capture
+      - key: SHYCLONE_QUOTA_CLONE
+        value: "12"             # captures par visiteur et par heure
+
+      # Application ouverte à tous par défaut. Pour la réserver à vous seul,
+      # ajoutez SHYCLONE_MDP dans l'onglet Environment : l'interface, l'API et
+      # l'aperçu demandent alors un mot de passe, l'identifiant étant « shy ».
+      # La sonde /api/health reste ouverte, sinon Render déclare le service en
+      # panne et le redémarre en boucle.
