@@ -1,5 +1,5 @@
-import { useId } from 'react'
-import { FileText, Layers, Loader2, Play, Square } from 'lucide-react'
+import { useId, useState } from 'react'
+import { ChevronRight, FileText, Layers, Loader2, Play, Square } from 'lucide-react'
 import { isValidUrl, normalizeUrl } from '../lib/url'
 
 export const PAGES_MAX = 5000
@@ -18,6 +18,8 @@ export function CloneForm({
   onModeChange,
   pagesMax,
   onPagesMaxChange,
+  cookies,
+  onCookiesChange,
   status,
   engineDown,
   onSubmit,
@@ -25,6 +27,8 @@ export function CloneForm({
 }) {
   const idUrl = useId()
   const idPages = useId()
+  const idCookies = useId()
+  const [avance, setAvance] = useState(false)
 
   const enCours = status === 'running'
   const verifie = status === 'checking'
@@ -130,6 +134,46 @@ export function CloneForm({
             )
           })}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => setAvance(v => !v)}
+          aria-expanded={avance}
+          className="flex items-center gap-1 self-start text-xs font-medium text-ink-soft transition-colors hover:text-ink"
+        >
+          <ChevronRight
+            size={13}
+            className={`transition-transform duration-200 ${avance ? 'rotate-90' : ''}`}
+          />
+          Site nécessitant une connexion
+        </button>
+
+        {avance && (
+          <div className="anim-apparition flex flex-col gap-1.5">
+            <label htmlFor={idCookies} className="text-xs text-ink-soft">
+              En-tête <span className="font-mono">Cookie</span> de votre session
+            </label>
+            <textarea
+              id={idCookies}
+              value={cookies}
+              onChange={e => onCookiesChange(e.target.value)}
+              disabled={enCours || verifie}
+              rows={3}
+              spellCheck={false}
+              placeholder="session=…; token=…"
+              className="w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs text-ink transition-colors placeholder:text-ink-faint hover:border-line-strong focus:border-focus disabled:opacity-55"
+            />
+            <p className="text-xs leading-relaxed text-ink-faint">
+              Ouvrez le site connecté, puis les outils de développement de votre
+              navigateur, onglet Réseau : copiez la valeur de l'en-tête
+              <span className="font-mono"> Cookie</span> d'une requête vers ce site.
+              Il n'est transmis qu'au domaine capturé — jamais aux ressources
+              externes — et disparaît avec la capture.
+            </p>
+          </div>
+        )}
       </div>
 
       {enCours ? (

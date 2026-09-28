@@ -23,6 +23,7 @@ export default function App() {
 
   const [url, setUrl] = useState('')
   const [mode, setMode] = useState('site')
+  const [cookies, setCookies] = useState('')
   const [pagesMax, setPagesMax] = useState(String(PAGES_DEFAUT))
   const [viewport, setViewport] = useState('desktop')
   const [injoignable, setInjoignable] = useState(null)
@@ -63,8 +64,8 @@ export default function App() {
     setExpire(false)
     // « Page seule » : le moteur s'arrête après l'adresse saisie, ses styles et
     // ses images étant de toute façon récupérés.
-    start(adresse, mode === 'page' ? 1 : budget)
-  }, [url, pagesMax, mode, start])
+    start(adresse, mode === 'page' ? 1 : budget, cookies.trim())
+  }, [url, pagesMax, mode, cookies, start])
 
   // Dernière page réellement écrite, affichée sous la maquette animée.
   const pageCourante = useMemo(() => {
@@ -94,6 +95,8 @@ export default function App() {
             onModeChange={setMode}
             pagesMax={pagesMax}
             onPagesMaxChange={setPagesMax}
+            cookies={cookies}
+            onCookiesChange={setCookies}
             status={job.status}
             engineDown={engine === 'down'}
             onSubmit={lancer}

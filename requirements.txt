@@ -1,6 +1,10 @@
 Flask>=3.0
 Flask-Cors>=4.0
 
+# Certains CDN répondent en brotli quoi qu'annonce le client. Sans ce paquet,
+# le moteur reçoit des octets illisibles et la capture part en vrille.
+brotli>=1.1
+
 # Serveur de production, utilisé par le Dockerfile. Inutile en local :
 # start.sh lance le serveur de développement de Flask.
 gunicorn>=21.2

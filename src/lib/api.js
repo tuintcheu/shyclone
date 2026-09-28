@@ -49,8 +49,8 @@ export function checkUrl(url, signal) {
   return json('/api/check', { ...POST_JSON({ url }), signal })
 }
 
-export function startClone(url, pagesMax) {
-  return json('/api/clone', POST_JSON({ url, pages_max: pagesMax }))
+export function startClone(url, pagesMax, cookies) {
+  return json('/api/clone', POST_JSON({ url, pages_max: pagesMax, cookies }))
 }
 
 export function fetchJob(jobId, from = 0, signal) {

@@ -40,6 +40,7 @@ Variables d'environnement reconnues :
 | `SHYCLONE_FORCE_HTTPS` | redirection HTTPS + en-tête HSTS | actif si exposé |
 | `SHYCLONE_QUOTA_CLONE` | captures autorisées par IP et par heure | `12` |
 | `SHYCLONE_QUOTA_CHECK` | vérifications autorisées par IP et par heure | `60` |
+| `SHYCLONE_DELAI` | délai réseau par requête, en secondes | `20` |
 | `SHYCLONE_RETENTION` | secondes avant suppression d'une capture | `780` (13 min) |
 | `VITE_PREVIEW_BASE` | origine servant l'aperçu, pour l'isoler | même origine |
 | `SHYCLONE_UI_PORT` | port de Vite | `5173` |
@@ -209,6 +210,16 @@ explicitement plutôt que de renvoyer une capture vide.
 
 Pages et ressources sont récupérées en parallèle : 5 pages et 8 ressources
 simultanément. Sur getbootstrap.com, 94 pages et 301 ressources en 31 s.
+
+**Sites nécessitant une connexion.** Le formulaire accepte un en-tête `Cookie`
+de session, copié depuis les outils de développement du navigateur. Il n'est
+transmis qu'au domaine capturé — jamais aux ressources externes, sans quoi la
+session de l'utilisateur partirait chez des tiers — n'apparaît dans aucune
+réponse de l'API et disparaît avec la capture.
+
+**Adresse pointant sur un fichier.** Si l'URL de départ désigne un PDF, une
+image ou une archive plutôt qu'une page, le fichier est conservé tel quel au
+lieu de faire échouer la capture.
 
 Garde-fous : 5000 pages maximum par job (50 par défaut), 8000 ressources, 1 Go,
 12 s de timeout réseau par requête. Les chemins de fichiers sont assainis et confinés au dossier

@@ -36,6 +36,11 @@ from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 import urllib.request as urllib_request
 from urllib.request import Request
 
+try:
+    import brotli
+except ImportError:                     # dépendance facultative
+    brotli = None
+
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
 
@@ -88,12 +93,14 @@ ENTETES = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
               "image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Accept-Encoding": "gzip, deflate",
+    "Accept-Encoding": "gzip, deflate, br" if brotli else "gzip, deflate",
 }
 ASSETS_PARALLELES = 8      # téléchargements de ressources simultanés
 PAGES_PARALLELES = 5       # pages récupérées simultanément
 CODES_BLOCAGE = (401, 403, 429)
-DELAI = 12                       # timeout réseau par requête, en secondes
+# Délai réseau par requête. Relevé à 20 s : certains hébergements régionaux
+# répondent lentement, et un timeout court les faisait passer pour injoignables.
+DELAI = int(os.environ.get("SHYCLONE_DELAI") or 20)
 PAGES_DEFAUT = 50
 PAGES_MAX = 5000
 ASSETS_MAX = 8000
@@ -360,15 +367,30 @@ def decompresser(donnees, encodage):
             except zlib.error:
                 continue
         return donnees
-    if encodage in ("br", "zstd"):
-        raise RuntimeError(f"compression {encodage} non prise en charge")
+    if encodage == "br":
+        if brotli is None:
+            raise RuntimeError("compression brotli non prise en charge")
+        try:
+            return brotli.decompress(donnees)
+        except Exception:
+            return donnees
+    if encodage == "zstd":
+        raise RuntimeError("compression zstd non prise en charge")
     return donnees
 
 
-def telecharger(url):
-    """Récupère une URL. Renvoie (octets, type_mime, en-tête, url_finale)."""
+def telecharger(url, cookies=None):
+    """Récupère une URL. Renvoie (octets, type_mime, en-tête, url_finale).
+
+    `cookies` n'est transmis que par l'appelant, et uniquement vers le domaine
+    de la capture : envoyer la session de l'utilisateur à un CDN tiers
+    reviendrait à la divulguer.
+    """
     verifier_cible(url)
-    requete = Request(url, headers=ENTETES)
+    entetes = dict(ENTETES)
+    if cookies:
+        entetes["Cookie"] = cookies
+    requete = Request(url, headers=entetes)
     with OUVREUR.open(requete, timeout=DELAI) as reponse:
         brut = decompresser(
             reponse.read(),
@@ -404,8 +426,11 @@ def message_erreur(exc):
 
 # ── Modèle de job ────────────────────────────────────────────────────────────
 class Job:
-    def __init__(self, url, pages_max):
+    def __init__(self, url, pages_max, cookies=None):
         self.id = uuid.uuid4().hex[:12]
+        # En-tête Cookie fourni par l'utilisateur pour capturer un espace
+        # auquel il a accès. Jamais journalisé, jamais renvoyé par l'API.
+        self.cookies = cookies or None
         self.url = url
         self.hote = urlsplit(url).netloc
         self.pages_max = pages_max
@@ -515,6 +540,12 @@ class Crawler:
             or len(self.assets_connus) >= ASSETS_MAX
         )
 
+    def cookies_pour(self, url):
+        """Ne transmet la session que vers le domaine capturé, jamais ailleurs."""
+        if not self.job.cookies:
+            return None
+        return self.job.cookies if meme_hote(urlsplit(url).netloc, self.job.hote) else None
+
     def ecrire(self, relatif, donnees, texte=False):
         cible = chemin_sur(self.job.dossier, relatif)
         if cible is None:
@@ -587,7 +618,7 @@ class Crawler:
         if self.job.arret.is_set():
             return
         try:
-            brut, mime, entete, _ = telecharger(url)
+            brut, mime, entete, _ = telecharger(url, self.cookies_pour(url))
         except Exception as exc:
             self.job.journal(f"Ressource ignorée ({message_erreur(exc)}) : {url}", "warn")
             return
@@ -691,7 +722,7 @@ class Crawler:
         """Récupère, réécrit et écrit une page. Appelée par plusieurs workers."""
         job = self.job
         try:
-            brut, mime, entete, url_finale = telecharger(url)
+            brut, mime, entete, url_finale = telecharger(url, self.cookies_pour(url))
         except HTTPError as exc:
             with self.verrou_pages:
                 self.echecs += 1
@@ -705,6 +736,20 @@ class Crawler:
             return
 
         if mime not in TYPES_PAGE:
+            with self.verrou_pages:
+                entree = not self.hote_verifie
+                self.hote_verifie = True
+            if entree:
+                # L'adresse saisie pointe directement sur un fichier (PDF,
+                # image, archive). On le conserve plutôt que de déclarer la
+                # capture vide.
+                nom = chemin_local(url, False, job.hote).rsplit("/", 1)[-1]
+                if self.ecrire(nom, brut):
+                    job.entree = nom
+                    with self.verrou_pages:
+                        job.pages += 1
+                    job.journal(f"Fichier capturé ({mime or 'type inconnu'}) — {nom}", "ok")
+                return
             job.journal(f"Ignoré (type {mime or 'inconnu'}) : {url}", "warn")
             return
 
@@ -897,9 +942,10 @@ def clone():
     except (TypeError, ValueError):
         pages_max = PAGES_DEFAUT
     pages_max = max(1, min(pages_max, PAGES_MAX))
+    cookies = (data.get("cookies") or "").strip().replace("\n", " ")[:4096] or None
 
     purger_anciens_jobs()
-    job = Job(url, pages_max)
+    job = Job(url, pages_max, cookies)
     with VERROU_JOBS:
         JOBS[job.id] = job
     threading.Thread(target=executer_job, args=(job,), daemon=True).start()
