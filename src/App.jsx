@@ -83,7 +83,7 @@ export default function App() {
       : null
 
   return (
-    <div className="flex min-h-svh flex-col lg:h-svh">
+    <div className="flex min-h-svh flex-col lg:h-svh lg:max-h-svh">
       <TopBar engine={engine} theme={theme} onToggleTheme={toggle} />
 
       <main className="grid min-h-0 flex-1 grid-rows-[auto_1fr] lg:grid-cols-[340px_1fr] lg:grid-rows-1">

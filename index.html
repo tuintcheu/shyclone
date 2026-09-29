@@ -24,6 +24,158 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Contenu servi directement dans le HTML, avant toute exécution de
+         JavaScript : c'est la seule partie qu'un moteur de recherche lit à
+         coup sûr. Sa mise en forme est autonome pour s'afficher même si le
+         script de l'application n'a pas encore été chargé. -->
+    <style>
+      /* Palette claire par défaut. La préférence du système s'applique tant
+         que l'application n'a pas tranché ; dès qu'elle pose sa classe sur
+         <html>, c'est elle qui fait foi — sans quoi le bas de page resterait
+         sombre alors que l'utilisateur a choisi le thème clair. */
+      .presentation {
+        --p-fond: #eceae5; --p-trait: #d3cfc6;
+        --p-encre: #0a0a09; --p-doux: #454239; --p-pale: #6f6b61; --p-lien: #1d4ed8;
+        background: var(--p-fond); color: var(--p-doux); border-top: 1px solid var(--p-trait);
+        font: 16px/1.7 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        .presentation {
+          --p-fond: #0a0a09; --p-trait: #3a3935;
+          --p-encre: #faf9f6; --p-doux: #b3afa6; --p-pale: #85817a; --p-lien: #7aa4ff;
+        }
+      }
+      html.dark .presentation {
+        --p-fond: #0a0a09; --p-trait: #3a3935;
+        --p-encre: #faf9f6; --p-doux: #b3afa6; --p-pale: #85817a; --p-lien: #7aa4ff;
+      }
+      html:not(.dark) .presentation {
+        --p-fond: #eceae5; --p-trait: #d3cfc6;
+        --p-encre: #0a0a09; --p-doux: #454239; --p-pale: #6f6b61; --p-lien: #1d4ed8;
+      }
+      .presentation > div { max-width: 46rem; margin: 0 auto; padding: 4rem 1.25rem 3rem; }
+      .presentation h1 { font-size: 1.75rem; line-height: 1.25; letter-spacing: -0.02em;
+        color: var(--p-encre); margin: 0 0 1rem; }
+      .presentation h2 { font-size: 1.15rem; color: var(--p-encre); margin: 2.5rem 0 0.75rem;
+        padding-top: 1.5rem; border-top: 1px solid var(--p-trait); }
+      .presentation h3 { font-size: 0.95rem; color: var(--p-encre); margin: 1.5rem 0 0.35rem; }
+      .presentation p, .presentation li { margin: 0.6rem 0; }
+      .presentation ul, .presentation ol { padding-left: 1.2rem; }
+      .presentation a { color: var(--p-lien); }
+      .presentation .repere { color: var(--p-pale); font-size: 0.875rem; }
+      .presentation footer { margin-top: 3rem; padding-top: 1.25rem;
+        border-top: 1px solid var(--p-trait); font-size: 0.8125rem; color: var(--p-pale); }
+      .presentation footer a { color: var(--p-doux); text-decoration: none; margin-right: 1rem; }
+    </style>
+
+    <section class="presentation">
+      <div>
+        <h1>ShyClone — outil de clonage de site web</h1>
+        <p>
+          ShyClone télécharge un site web complet — ses pages, ses feuilles de
+          style, ses images et ses polices — puis réécrit tous les liens pour
+          que la copie fonctionne sans connexion. Vous obtenez un aperçu
+          immédiat dans le navigateur et une archive ZIP à conserver.
+        </p>
+        <p class="repere">
+          Gratuit, sans inscription. L'outil est au-dessus de cette page.
+        </p>
+
+        <h2>Comment cloner un site</h2>
+        <ol>
+          <li><strong>Collez l'adresse</strong> du site à capturer.</li>
+          <li>
+            <strong>Choisissez l'étendue</strong> : la page seule, ou le site
+            entier en suivant ses liens internes, dans la limite que vous fixez.
+          </li>
+          <li>
+            <strong>Lancez la capture.</strong> Les pages s'affichent au fur et
+            à mesure ; à la fin, l'aperçu montre le site tel qu'il sera hors
+            ligne et le bouton d'archive vous le remet en ZIP.
+          </li>
+        </ol>
+
+        <h2>Ce que la capture contient</h2>
+        <p>
+          Chaque page est enregistrée avec les ressources dont elle a besoin, et
+          ses liens sont réécrits vers les fichiers récupérés : la copie
+          s'ouvre depuis votre disque, sans rien demander au site d'origine.
+          Les ressources hébergées ailleurs — polices, bibliothèques servies par
+          un CDN — sont récupérées elles aussi.
+        </p>
+        <p>
+          Les sites dont le contenu est assemblé par le navigateur peuvent être
+          capturés avec l'option de rendu JavaScript, lorsqu'elle est
+          disponible. La copie est alors fidèle, mais figée : ses scripts sont
+          retirés, faute de quoi la page se viderait à l'affichage.
+        </p>
+
+        <h2>Questions fréquentes</h2>
+
+        <h3>Ai-je le droit de cloner n'importe quel site ?</h3>
+        <p>
+          Non. Un site web est une œuvre protégée : en copier tout ou partie
+          sans autorisation peut constituer une contrefaçon, et les conditions
+          d'utilisation du site visé peuvent l'interdire. Vous êtes seul
+          responsable des adresses que vous soumettez. Voyez nos
+          <a href="/cgu.html">conditions générales d'utilisation</a>.
+        </p>
+
+        <h3>Combien de temps la capture est-elle conservée ?</h3>
+        <p>
+          Treize minutes après la fin du clonage, puis elle est supprimée
+          automatiquement. Téléchargez l'archive avant l'échéance : aucune
+          récupération n'est possible ensuite.
+        </p>
+
+        <h3>Tous les sites sont-ils capturables ?</h3>
+        <p>
+          Non. Ceux qui sont protégés par un service anti-robot refusent la
+          capture, et nous ne contournons pas ces protections. Un espace
+          nécessitant une connexion exige que vous fournissiez vous-même le
+          cookie de votre session.
+        </p>
+
+        <h3>Faut-il créer un compte ?</h3>
+        <p>
+          Non, et aucune donnée personnelle n'est demandée. Aucun cookie
+          publicitaire, aucun traceur : voyez notre
+          <a href="/confidentialite.html">politique de confidentialité</a>.
+        </p>
+
+        <h3>Pourquoi cloner un site ?</h3>
+        <p>
+          Pour archiver une page avant qu'elle ne disparaisse, consulter une
+          documentation hors connexion, étudier la structure d'un site que vous
+          avez le droit de copier, ou conserver une trace d'un contenu qui vous
+          appartient.
+        </p>
+
+        <footer>
+          <nav>
+            <a href="/mentions-legales.html">Mentions légales</a>
+            <a href="/confidentialite.html">Confidentialité</a>
+            <a href="/cgu.html">CGU</a>
+          </nav>
+          <p>ShyClone — mr_shy</p>
+        </footer>
+      </div>
+    </section>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "ShyClone",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Tout navigateur web",
+        "inLanguage": "fr",
+        "description": "Outil de clonage de site web : capture les pages, styles et images d'un site et les restitue consultables hors ligne, avec une archive ZIP.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "XAF" }
+      }
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
