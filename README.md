@@ -35,6 +35,7 @@ Variables d'environnement reconnues :
 | `SHYCLONE_MDP` | mot de passe d'accès à l'application (vide = ouverte) | vide |
 | `SHYCLONE_UTILISATEUR` | identifiant associé | `shy` |
 | `SHYCLONE_TOKEN` | jeton exigé sur `/api` (vide = désactivé) | vide |
+| `SHYCLONE_VERIF_GOOGLE` | code de vérification Search Console | vide |
 | `VITE_API_TOKEN` | jeton envoyé par l'interface | vide |
 | `SHYCLONE_BLOQUER_PRIVE` | refuse les adresses réseau internes | actif si exposé |
 | `SHYCLONE_FORCE_HTTPS` | redirection HTTPS + en-tête HSTS | actif si exposé |
@@ -172,9 +173,13 @@ Ce qui est en place :
   demande au navigateur de ne plus y revenir pendant un an.
 - **Quotas par visiteur.** Douze captures par heure et par adresse IP, soixante
   vérifications. Sans ça, un aspirateur laissé ouvert tourne en boucle.
-- **Aucune indexation.** `robots.txt` interdit tout, et les pages portent
-  `noindex` : ni l'outil ni les copies de sites tiers servies sous `/preview/`
-  n'ont vocation à se retrouver dans un moteur de recherche.
+- **Indexation sélective.** L'outil et ses pages légales sont indexables ;
+  `/preview/` et `/api/` ne le sont pas. `robots.txt` et `sitemap.xml` sont
+  servis dynamiquement et suivent donc le domaine réel. Les réponses sous
+  `/preview/` portent en plus un en-tête `X-Robots-Tag: noindex`, qui tient
+  face à un robot ignorant `robots.txt`. Laisser indexer les captures
+  reviendrait à publier sous votre domaine des copies de sites tiers : contenu
+  dupliqué, et demandes de retrait adressées à vous.
 
 Ce qu'il faut savoir :
 
@@ -212,6 +217,22 @@ La politique de confidentialité décrit l'état réel du code : aucun cookie,
 aucun traceur, captures supprimées à treize minutes, adresse IP conservée une
 heure pour les quotas. Si vous ajoutez une mesure d'audience ou un paiement,
 il faudra la mettre à jour.
+
+## Référencement
+
+L'outil est indexable, les captures ne le sont pas. Pour le déclarer à Google :
+
+1. Ouvrez [Search Console](https://search.google.com/search-console), ajoutez
+   votre domaine en choisissant la méthode **balise HTML**.
+2. Renseignez le code fourni dans la variable `SHYCLONE_VERIF_GOOGLE` de votre
+   hébergeur, puis validez. La balise est injectée à la volée : aucune
+   reconstruction de l'image n'est nécessaire.
+3. Soumettez `https://votre-domaine/sitemap.xml`.
+
+Une page unique portant un formulaire et trois phrases ne se classera pas pour
+autant. Le référencement demande du contenu : ce que fait l'outil, pour qui, ce
+qu'il ne fait pas, une foire aux questions. C'est un travail de rédaction, pas
+de configuration.
 
 ## Fonctionnement
 

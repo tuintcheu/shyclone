@@ -63,6 +63,10 @@ HOTE = os.environ.get("SHYCLONE_HOST", "127.0.0.1")
 # n'importe quel site par votre serveur.
 JETON = os.environ.get("SHYCLONE_TOKEN", "").strip()
 
+# Code de vérification Google Search Console, injecté dans la page pour éviter
+# d'avoir à reconstruire l'image à chaque changement.
+VERIF_GOOGLE = os.environ.get("SHYCLONE_VERIF_GOOGLE", "").strip()
+
 # Mot de passe d'accès (authentification HTTP « Basic »). Vide en local : rien
 # ne change. Renseigné, il ferme l'application entière — interface, API et
 # aperçu — sans page de connexion à maintenir : le navigateur retient les
@@ -189,6 +193,10 @@ def entetes_reponse(reponse):
     reponse.headers.pop("X-Powered-By", None)
     if FORCER_HTTPS:
         reponse.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Ceinture et bretelles : un robot qui ignorerait robots.txt se heurte
+    # quand même à cet en-tête sur les copies de sites tiers.
+    if request.path.startswith("/preview/"):
+        reponse.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
     return reponse
 
 
@@ -1196,6 +1204,66 @@ def preview(job_id, relatif=None):
         return "Fichier absent de la capture", 404
 
 
+@app.get("/robots.txt")
+def robots():
+    """Autorise l'indexation de l'outil, jamais celle des sites capturés.
+
+    Laisser un moteur indexer /preview reviendrait à publier sous ce domaine
+    des copies de sites tiers — contenu dupliqué et demandes de retrait pour
+    l'éditeur du service.
+    """
+    racine = request.url_root.rstrip("/")
+    return Response(
+        # Aucune règle Allow : tout ce qui n'est pas interdit l'est
+        # implicitement, et un Allow mal placé sème la confusion.
+        "User-agent: *\n"
+        "Disallow: /preview/\n"
+        "Disallow: /api/\n\n"
+        f"Sitemap: {racine}/sitemap.xml\n",
+        mimetype="text/plain",
+    )
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    racine = request.url_root.rstrip("/")
+    entrees = "".join(
+        f"<url><loc>{racine}{chemin}</loc>"
+        f"<changefreq>{frequence}</changefreq>"
+        f"<priority>{priorite}</priority></url>"
+        for chemin, frequence, priorite in (
+            ("/", "weekly", "1.0"),
+            ("/cgu.html", "yearly", "0.3"),
+            ("/confidentialite.html", "yearly", "0.3"),
+            ("/mentions-legales.html", "yearly", "0.3"),
+        )
+    )
+    return Response(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{entrees}</urlset>",
+        mimetype="application/xml",
+    )
+
+
+_page_accueil = {}
+
+
+def page_accueil():
+    """index.html, avec le code de vérification Search Console si fourni."""
+    fichier = DOSSIER_UI / "index.html"
+    signature = fichier.stat().st_mtime_ns
+    if _page_accueil.get("signature") != signature:
+        html = fichier.read_text(encoding="utf-8")
+        if VERIF_GOOGLE:
+            html = html.replace(
+                "</head>",
+                f'  <meta name="google-site-verification" content="{VERIF_GOOGLE}" />\n  </head>',
+            )
+        _page_accueil.update(signature=signature, html=html)
+    return Response(_page_accueil["html"], mimetype="text/html")
+
+
 @app.get("/")
 @app.get("/<path:chemin>")
 def interface(chemin=""):
@@ -1227,7 +1295,7 @@ def interface(chemin=""):
             page = chemin_sur(DOSSIER_UI, chemin + ".html")
             if page is not None and page.is_file():
                 return send_from_directory(DOSSIER_UI, chemin + ".html")
-    return send_from_directory(DOSSIER_UI, "index.html")
+    return page_accueil()
 
 
 if __name__ == "__main__":
